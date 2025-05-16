@@ -617,44 +617,44 @@ async def handle_new_message(event):
                 phone = broadcast_state[SENDER]['phone']
                 broadcast_message = text
                 del broadcast_state[SENDER]
-                
+
                 client = TelegramClient(f"{path}sessions/users/{phone}", api_id, api_hash)
                 await client.connect()
-                
+
                 try:
                     status_msg = await event.respond("📤 **Memulai Broadcast...**")
                     dialogs = await client.get_dialogs()
                     contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
                     contacts = contacts_result.users
-                    
+
                     success = 0
                     failed = 0
                     skipped_bots = 0
                     failed_groups = 0
                     total_targets = len(dialogs) + len(contacts)
                     media_path = None
-                    
+
                     # Klasifikasi target
                     mutual_users = []
                     non_mutual_users = []
                     groups = []
-                    
+
                     for dialog in dialogs:
                         # Skip channel
                         if dialog.is_channel:
                             continue
-                            
+
                         # Skip bot
                         if hasattr(dialog.entity, 'bot') and dialog.entity.bot:
                             skipped_bots += 1
                             continue
-                            
+
                         # Skip blacklist
                         if hasattr(dialog.entity, 'username') and dialog.entity.username in BLACKLISTED_GROUPS:
                             continue
                         if hasattr(dialog.entity, 'id') and dialog.entity.id in BLACKLISTED_GROUPS:
                             continue
-                            
+
                         if dialog.is_group:
                             groups.append(dialog)
                         elif dialog.is_user:
@@ -662,7 +662,7 @@ async def handle_new_message(event):
                                 mutual_users.append(dialog)
                             else:
                                 non_mutual_users.append(dialog)
-                    
+
                     # Tambahkan kontak yang belum ada di dialog
                     for contact in contacts:
                         contact_exists = any(
@@ -673,12 +673,39 @@ async def handle_new_message(event):
                             if hasattr(contact, 'bot') and contact.bot:
                                 skipped_bots += 1
                                 continue
-                                
+
                             if contact.mutual_contact or contact.is_self:
                                 mutual_users.append(contact)
                             else:
                                 non_mutual_users.append(contact)
-                    
+
+                    total_targets = len(mutual_users) + len(non_mutual_users) + len(groups)
+
+                    # Fungsi untuk update status
+                    async def update_status(current_stage, current_success, current_failed):
+                        progress_percent = round((current_success + current_failed) / total_targets * 100, 1)
+                        progress_bar = "🟢" * int(progress_percent/10) + "⚪" * (10 - int(progress_percent/10))
+                        kiw = (
+                            "⚠️ **PERHATIAN:**\n"
+                            "Harap tunggu hingga semua proses broadcast selesai jangan melakukan tindakan yang lain!!!. "
+                            "Dapat terjadi error jika anda tidak menunggu proses broadcast hingga selesai dilakukan!!!.\n\n"
+                        )
+                        status_text = (
+                            f"📤 **Broadcast Progress**\n\n"
+                            f"**Stage:** {current_stage}\n"
+                            f"**Progress:** {progress_bar} {progress_percent}%\n"
+                            f"✅ **Berhasil:** `{current_success}`\n"
+                            f"❌ **Gagal:** `{current_failed}`\n"
+                            f"🤖 **Bot Dilewati:** `{skipped_bots}`\n"
+                            f"👥 **Total Target:** `{total_targets}`\n\n"
+                            f"**Detail Target:**\n"
+                            f"👫 Mutual: {len(mutual_users)}\n"
+                            f"👤 Non-Mutual: {len(non_mutual_users)}\n"
+                            f"👥 Grup: {len(groups)}"
+                            f"{kiw}"
+                        )
+                        await status_msg.edit(status_text)
+
                     # Jika ada media
                     if event.media:
                         try:
@@ -686,7 +713,7 @@ async def handle_new_message(event):
                             media_dir = os.path.join(path, "media_broadcast")
                             os.makedirs(media_dir, exist_ok=True)
                             timestamp = int(time.time())
-                            
+
                             try:
                                 media_path = await client.download_media(
                                     event.message,
@@ -700,16 +727,16 @@ async def handle_new_message(event):
                                 except Exception as alt_error:
                                     await event.respond(f"❌ Gagal mengunduh media: {alt_error}")
                                     return
-                            
+
                             if not media_path or not os.path.exists(media_path):
                                 await event.respond("❌ File media tidak valid atau tidak ditemukan!")
                                 return
-                            
+
                             caption = broadcast_message if broadcast_message else ""
-                            
+
                             # PROSES 1: Kirim ke mutual kontak terlebih dahulu
-                            await status_msg.edit("**🔁 Memproses Mutual Kontak...**")
-                            for target in mutual_users:
+                            await update_status("Mutual Kontak", success, failed)
+                            for idx, target in enumerate(mutual_users, 1):
                                 try:
                                     if isinstance(target, Dialog):
                                         await client.send_file(target.id, file=media_path, caption=caption)
@@ -719,11 +746,13 @@ async def handle_new_message(event):
                                 except Exception as e:
                                     failed += 1
                                 finally:
+                                    if idx % 5 == 0 or idx == len(mutual_users):
+                                        await update_status(f"Mutual Kontak ({idx}/{len(mutual_users)})", success, failed)
                                     await asyncio.sleep(0.5)
-                            
+
                             # PROSES 2: Kirim ke non-mutual kontak
-                            await status_msg.edit("**🔁 Memproses Non-Mutual Kontak...**")
-                            for target in non_mutual_users:
+                            await update_status("Non-Mutual Kontak", success, failed)
+                            for idx, target in enumerate(non_mutual_users, 1):
                                 try:
                                     if isinstance(target, Dialog):
                                         await client.send_file(target.id, file=media_path, caption=caption)
@@ -733,11 +762,13 @@ async def handle_new_message(event):
                                 except Exception as e:
                                     failed += 1
                                 finally:
+                                    if idx % 5 == 0 or idx == len(non_mutual_users):
+                                        await update_status(f"Non-Mutual Kontak ({idx}/{len(non_mutual_users)})", success, failed)
                                     await asyncio.sleep(0.5)
-                            
+
                             # PROSES 3: Kirim ke grup
-                            await status_msg.edit("**🔁 Memproses Grup...**")
-                            for group in groups:
+                            await update_status("Grup", success, failed)
+                            for idx, group in enumerate(groups, 1):
                                 try:
                                     await client.send_file(group.id, file=media_path, caption=caption)
                                     success += 1
@@ -745,17 +776,19 @@ async def handle_new_message(event):
                                     failed += 1
                                     failed_groups += 1
                                 finally:
+                                    if idx % 5 == 0 or idx == len(groups):
+                                        await update_status(f"Grup ({idx}/{len(groups)})", success, failed)
                                     await asyncio.sleep(0.5)
-                        
+
                         except Exception as e:
                             await event.respond(f"❌ Error saat memproses media: {str(e)}")
                             return
-                    
+
                     # Jika hanya teks
                     else:
                         # PROSES 1: Kirim ke mutual kontak terlebih dahulu
-                        await status_msg.edit("**🔁 Memproses Mutual Kontak...**")
-                        for target in mutual_users:
+                        await update_status("Mutual Kontak", success, failed)
+                        for idx, target in enumerate(mutual_users, 1):
                             try:
                                 if isinstance(target, Dialog):
                                     await client.send_message(target.id, broadcast_message)
@@ -765,11 +798,13 @@ async def handle_new_message(event):
                             except Exception as e:
                                 failed += 1
                             finally:
+                                if idx % 5 == 0 or idx == len(mutual_users):
+                                    await update_status(f"Mutual Kontak ({idx}/{len(mutual_users)})", success, failed)
                                 await asyncio.sleep(0.5)
-                        
+
                         # PROSES 2: Kirim ke non-mutual kontak
-                        await status_msg.edit("**🔁 Memproses Non-Mutual Kontak...**")
-                        for target in non_mutual_users:
+                        await update_status("Non-Mutual Kontak", success, failed)
+                        for idx, target in enumerate(non_mutual_users, 1):
                             try:
                                 if isinstance(target, Dialog):
                                     await client.send_message(target.id, broadcast_message)
@@ -779,11 +814,13 @@ async def handle_new_message(event):
                             except Exception as e:
                                 failed += 1
                             finally:
+                                if idx % 5 == 0 or idx == len(non_mutual_users):
+                                    await update_status(f"Non-Mutual Kontak ({idx}/{len(non_mutual_users)})", success, failed)
                                 await asyncio.sleep(0.5)
-                        
+
                         # PROSES 3: Kirim ke grup
-                        await status_msg.edit("**🔁 Memproses Grup...**")
-                        for group in groups:
+                        await update_status("Grup", success, failed)
+                        for idx, group in enumerate(groups, 1):
                             try:
                                 await client.send_message(group.id, broadcast_message)
                                 success += 1
@@ -791,27 +828,29 @@ async def handle_new_message(event):
                                 failed += 1
                                 failed_groups += 1
                             finally:
+                                if idx % 5 == 0 or idx == len(groups):
+                                    await update_status(f"Grup ({idx}/{len(groups)})", success, failed)
                                 await asyncio.sleep(0.5)
-                    
+
                     # Hasil akhir
                     result_message = (
                         f"**🏁 Broadcast Selesai!**\n"
-                        f"📊 **Total Target:** `{len(mutual_users)+len(non_mutual_users)+len(groups)}`\n"
+                        f"📊 **Total Target:** `{total_targets}`\n"
                         f"✅ **Berhasil:** `{success}`\n"
                         f"❌ **Gagal:** `{failed}`\n"
                         f"🤖 **Bot Dilewati:** `{skipped_bots}`\n"
                         f"👥 **Grup Gagal:** `{failed_groups}`\n"
-                        f"⚡ **Persentase Sukses:** `{round((success/(success+failed))*100, 2)}%`\n\n"
+                        f"⚡ **Persentase Sukses:** `{round((success/(success+failed))*100, 2) if (success+failed) > 0 else 0}%`\n\n"
                         f"**Urutan Pengiriman:**\n"
                         f"1. Mutual Kontak: {len(mutual_users)} target\n"
                         f"2. Non-Mutual Kontak: {len(non_mutual_users)} target\n"
                         f"3. Grup: {len(groups)} target"
                     )
-                    
+
                     await status_msg.edit(result_message)
-                
+
                 except Exception as e:
-                    await event.respond(f"**⚠️ Error:** `{str(e)}`")
+                    await event.respond(f"**⚠️ Error:** `{str(e)} \n\n **USER SUDAH LOGOUT!!!**`")
                 finally:
                     # Clean up media files
                     if media_path and os.path.exists(media_path):
@@ -899,7 +938,7 @@ async def handle_new_message(event):
 
                     group = await get_group_entity()
                     if not group:
-                        await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
+                        await status_msg.edit("⚠️ Akun ini tidak dapat bergabung pada grup atau sesinya sudah tidak aktif(LOGOUT) bosku.")
                         return
 
                     if isinstance(group, types.Chat):
@@ -1275,7 +1314,7 @@ async def callback_handler(event):
                     # Update progress
                     progress = f"⏳ Progress: {min(i + batch_size, total_contacts)}/{total_contacts} | ✅ {success} | ❌ {failed}"
                     await status_msg.edit(progress)
-                    await asyncio.sleep(2)  # Anti-flood
+                    await asyncio.sleep(1)  # Anti-flood
                 
                 # Hasil akhir
                 report = (
