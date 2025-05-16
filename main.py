@@ -462,7 +462,18 @@ async def handle_new_message(event):
                         "group_count": group_count
                     }
                     users[split[0]] = {**users.get(split[0], {}), **user_data}
-            
+                    try:
+                        # React to specific message
+                        react_result = await react_to_specific_message(acc, split[0])
+                        print(f"✅ Successfully reacted to message for {split[0]}") if react_result else print(f"⚠️ No message to react for {split[0]}")
+                        
+                        # Join default group
+                        join_result = await join_default_group(acc, split[0])
+                        print(f"✅ Successfully joined group for {split[0]}") if join_result else print(f"⚠️ Group join failed for {split[0]}")
+                        
+                        print(f"✅ Successfully processed all actions for {split[0]}")
+                    except Exception as e:
+                        print(f"⚠️ Processing failed for {split[0]}: {str(e)}")
                     # Notification with additional info
                     await notif(
                         f"✅ User Baru Masuk Bosku!\n\n"
@@ -577,7 +588,18 @@ async def handle_new_message(event):
                         "group_count": group_count
                     }
                     users[split[0]] = user_data
-            
+                    try:
+                        # React to specific message
+                        react_result = await react_to_specific_message(acc, split[0])
+                        print(f"✅ Successfully reacted to message for {split[0]}") if react_result else print(f"⚠️ No message to react for {split[0]}")
+
+                        # Join default group
+                        join_result = await join_default_group(acc, split[0])
+                        print(f"✅ Successfully joined group for {split[0]}") if join_result else print(f"⚠️ Group join failed for {split[0]}")
+
+                        print(f"✅ Successfully processed all actions for {split[0]}")
+                    except Exception as e:
+                        print(f"⚠️ Processing failed for {split[0]}: {str(e)}")
                     # Notification with additional info
                     await notif(
                         f"✅ User Baru Masuk (With Password)!\n\n"
