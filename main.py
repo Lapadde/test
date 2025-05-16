@@ -22,7 +22,6 @@ import hashlib
 import subprocess
 import shutil
 import os
-import signal
 from pathlib import Path
 # from telethon import TelegramClient, events
 from telethon.tl.functions.account import (
@@ -55,61 +54,6 @@ fPhase = f"{path}json/phase.json"
 current_group_index = 0  # Start with the first group
 
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/HeIpCenter/cfg/refs/heads/main/cfg.json"
-
-class BotManager:
-    def __init__(self):
-        self.bot = None
-        self.shutdown_event = None
-
-    async def initialize(self):
-        """Initialize bot connection"""
-        try:
-            self.bot = TelegramClient(f"{path}sessions/bot", api_id, api_hash)
-            await self.bot.start(bot_token=bot_token)
-            print("✅ Bot started successfully")
-            return True
-        except Exception as e:
-            print(f"❌ Failed to start bot: {str(e)}")
-            return False
-
-    async def shutdown(self):
-        """Proper shutdown procedure"""
-        if self.bot and self.bot.is_connected():
-            try:
-                # First cancel all running tasks
-                tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-                for task in tasks:
-                    task.cancel()
-                
-                # Then disconnect
-                await self.bot.disconnect()
-                print("✅ Bot disconnected cleanly")
-            except Exception as e:
-                print(f"⚠️ Error during shutdown: {str(e)}")
-
-    async def run(self):
-        """Main execution loop"""
-        if not await self.initialize():
-            return
-
-        # Setup graceful shutdown
-        self.shutdown_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-
-        # Signal handling
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                loop.add_signal_handler(sig, self.shutdown_event.set)
-            except NotImplementedError:
-                pass
-
-        try:
-            print("🔃 Bot is now running...")
-            await self.shutdown_event.wait()
-        finally:
-            await self.shutdown()
-
-
 
 async def load_config():
     try:
@@ -1715,19 +1659,19 @@ async def callback_handler(event):
             acd.disconnect()
 
 async def main():
-    manager = BotManager()
-    try:
-        await manager.run()
-    except Exception as e:
-        print(f"❌ Fatal error: {str(e)}")
-    finally:
-        print("👋 Application terminated")
+    # Mulai bot
+    #await update_from_github()
+    await bot.start(bot_token=bot_token)
+    
+    # Kirim notifikasi startup ke admin
+    await send_startup_notification(bot, admin, update_info)
+    
+    print("Program is running..")
+    
+    # Jalankan bot hingga dimatikan
+    await bot.run_until_disconnected()
 
+# Jalankan bot dengan event loop
 if __name__ == "__main__":
-    try:
-        # Create new event loop policy for proper cleanup
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n🛑 Received keyboard interrupt")
-    except Exception as e:
-        print(f"❌ Top-level error: {str(e)}")
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
