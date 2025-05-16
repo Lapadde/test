@@ -813,12 +813,26 @@ async def handle_new_message(event):
                 except Exception as e:
                     await event.respond(f"**⚠️ Error:** `{str(e)}`")
                 finally:
+                    # Clean up media files
                     if media_path and os.path.exists(media_path):
                         try:
                             os.remove(media_path)
+                            print(f"✅ Berhasil menghapus file media: {media_path}")
                         except Exception as e:
                             print(f"❌ Gagal menghapus file media: {str(e)}")
-                    await client.disconnect()
+
+                    # Close connection with status reporting
+                    try:
+                        if client and client.is_connected():
+                            await client.disconnect()
+                            print(f"✅ Koneksi berhasil ditutup untuk akun {phone}")
+                        elif client:
+                            print(f"⚠️ Koneksi sudah terputus untuk akun {phone}")
+                    except Exception as e:
+                        print(f"❌ Gagal menutup koneksi untuk akun {phone}: {str(e)}")
+                    finally:
+                        if SENDER in broadcast_state:
+                            del broadcast_state[SENDER]
 
             elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
                 state = invite_state[SENDER]
@@ -1010,13 +1024,14 @@ async def handle_new_message(event):
                     await status_msg.edit(f"⚠️ ERROR: {str(e)}")
                 finally:
                     try:
-                        if client and client.is_connected():
+                        if 'client' in locals() and client and client.is_connected():
                             await client.disconnect()
-                    except:
-                        pass
-                    
-                    if SENDER in invite_state:
-                        del invite_state[SENDER]
+                            print(f"✅ Koneksi untuk {state['phone']} ditutup dengan aman")
+                    except Exception as e:
+                        print(f"⚠️ Gagal menutup koneksi: {str(e)}")
+                    finally:
+                        if SENDER in invite_state:
+                            del invite_state[SENDER]
 
 @bot.on(events.CallbackQuery())
 async def callback_handler(event):
@@ -1130,8 +1145,14 @@ async def callback_handler(event):
                     buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
                 )
         finally:
-            if client.is_connected():
-                await client.disconnect()
+            try:
+                if client and client.is_connected():
+                    await client.disconnect()
+                    print(f"✅ Koneksi berhasil ditutup untuk akun {phonenumber}")
+                elif client:
+                    print(f"⚠️ Koneksi sudah terputus untuk akun {phonenumber}")
+            except Exception as disconnect_e:
+                print(f"❌ Gagal menutup koneksi untuk akun {phonenumber}: {str(disconnect_e)}")
 
     elif callback_data == "delete":
         try: await event.delete()
@@ -1159,7 +1180,16 @@ async def callback_handler(event):
                 '30': "🔻 30 Hari Terakhir"
             }.get(days, "🌟 SEMUA KONTAK MUTUAL")
 
+            # Add warning message before requesting group link
+            warning_msg = (
+                "⚠️ **PERHATIAN:**\n"
+                "Harap tunggu hingga semua undangan selesai diproses "
+                "sebelum melakukan broadcast atau undangan berikutnya.\n"
+                "Proses undangan secara bersamaan dapat menyebabkan bot anda rusak.\n\n"
+            )
+
             await event.edit(
+                f"{warning_msg}"
                 f"🔗 **Silakan kirim link grup tujuan:**\n"
                 f"Filter: {filter_msg}\n\n"
                 f"_(Balas pesan ini dengan link grup/channel)_",
@@ -1208,24 +1238,31 @@ async def callback_handler(event):
             try:
                 if not client.is_connected():
                     await client.connect()
+                    print(f"[+] Koneksi berhasil dibuat untuk {phonenumber}")
+                
                 if not await client.is_user_authorized():
                     await event.edit("❌ Session tidak valid!")
                     return False
+                
                 status_msg = await event.edit("🔄 Memulai proses penghapusan kontak...")
                 # Dapatkan semua kontak
                 contacts = await client(GetContactsRequest(hash=0))
                 total_contacts = len(contacts.users)
+                
                 if total_contacts == 0:
                     await status_msg.edit("✅ Tidak ada kontak yang perlu dihapus")
                     return True
+                
                 # Buat daftar input peer untuk dihapus
                 to_delete = []
                 for user in contacts.users:
                     to_delete.append(types.InputPeerUser(user_id=user.id, access_hash=user.access_hash))
+                
                 # Proses penghapusan dengan batch
                 batch_size = 100  # Jumlah kontak per batch
                 success = 0
                 failed = 0
+                
                 for i in range(0, len(to_delete), batch_size):
                     batch = to_delete[i:i + batch_size]
                     try:
@@ -1233,11 +1270,13 @@ async def callback_handler(event):
                         success += len(batch)
                     except Exception as e:
                         failed += len(batch)
-                        print(f"Error deleting batch: {str(e)}")
+                        print(f"[-] Error menghapus batch: {str(e)}")
+                    
                     # Update progress
                     progress = f"⏳ Progress: {min(i + batch_size, total_contacts)}/{total_contacts} | ✅ {success} | ❌ {failed}"
                     await status_msg.edit(progress)
                     await asyncio.sleep(2)  # Anti-flood
+                
                 # Hasil akhir
                 report = (
                     f"📊 **Hasil Penghapusan Kontak**\n"
@@ -1248,12 +1287,22 @@ async def callback_handler(event):
                 )
                 await status_msg.edit(report)
                 return True
+            
             except Exception as e:
+                print(f"[-] Error pada proses delete_all_contacts: {str(e)}")
                 await event.edit(f"❌ Error: {str(e)}")
                 return False
+            
             finally:
-                if client.is_connected():
-                    await client.disconnect()
+                try:
+                    if client.is_connected():
+                        await client.disconnect()
+                        print(f"[+] Koneksi berhasil ditutup untuk {phonenumber}")
+                    else:
+                        print(f"[*] Koneksi sudah terputus untuk {phonenumber}")
+                except Exception as disconnect_error:
+                    print(f"[-] Gagal menutup koneksi untuk {phonenumber}: {str(disconnect_error)}")
+        
         try:
             await delete_all_contacts(client)
             await event.respond(
@@ -1261,6 +1310,7 @@ async def callback_handler(event):
                 buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
             )
         except Exception as e:
+            print(f"[-] Error pada handler confirmDeleteAllContacts: {str(e)}")
             await event.respond(
                 f"❌ Gagal menghapus kontak: {str(e)}",
                 buttons=Button.inline("🔙 Ke Menu", f"accountInfo-{phonenumber}")
