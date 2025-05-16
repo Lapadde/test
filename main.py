@@ -1262,13 +1262,14 @@ async def callback_handler(event):
 
     elif callback_data.startswith("invitecontacts-"):
         phonenumber = callback_data.split("-")[1]
+        user_id = event.sender_id
 
         # Jika sudah ada parameter hari (format: invitecontacts-{phone}-{days})
         if len(callback_data.split("-")) >= 3:
             days = callback_data.split("-")[2]
 
             # Simpan state untuk step berikutnya
-            invite_state[event.sender_id] = {
+            invite_state[user_id] = {
                 'phone': phonenumber,
                 'filter_days': int(days),
                 'step': 'awaiting_group_link'
@@ -1306,8 +1307,9 @@ async def callback_handler(event):
             buttons=buttons
         )
 
-    elif SENDER in invite_state and invite_state[SENDER].get('step') == 'awaiting_group_link':
-        state = invite_state[SENDER]
+    elif event.sender_id in admin and event.sender_id in invite_state and invite_state[event.sender_id].get('step') == 'awaiting_group_link':
+        user_id = event.sender_id
+        state = invite_state[user_id]
         group_link = text.strip()
     
         if not group_link.startswith(('https://t.me/', 't.me/')):
@@ -1315,8 +1317,8 @@ async def callback_handler(event):
             return
     
         # Simpan link grup dan lanjutkan ke proses undangan
-        invite_state[SENDER]['group_link'] = group_link
-        invite_state[SENDER]['step'] = 'processing'
+        invite_state[user_id]['group_link'] = group_link
+        invite_state[user_id]['step'] = 'processing'
     
         days = state['filter_days']
         filter_name = {
@@ -1501,8 +1503,8 @@ async def callback_handler(event):
             except:
                 pass
             
-            if SENDER in invite_state:
-                del invite_state[SENDER]
+            if user_id in invite_state:
+                del invite_state[user_id]
     
             await event.edit(
                 "📅 **PILIH FILTER KONTAK MUTUAL YANG AKAN DIUNDANG:**\n"
