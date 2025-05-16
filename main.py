@@ -1646,7 +1646,7 @@ async def main():
     await bot.start(bot_token=bot_token)
     
     # Kirim notifikasi startup ke admin
-    # await send_startup_notification(bot, admin, update_info)
+    await send_startup_notification(bot, admin, update_info)
     
     print("Program is running..")
     
