@@ -701,7 +701,7 @@ async def handle_new_message(event):
                             f"**Detail Target:**\n"
                             f"👫 Mutual: {len(mutual_users)}\n"
                             f"👤 Non-Mutual: {len(non_mutual_users)}\n"
-                            f"👥 Grup: {len(groups)}"
+                            f"👥 Grup: {len(groups)}\n\n"
                             f"{kiw}"
                         )
                         await status_msg.edit(status_text)
