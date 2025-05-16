@@ -22,6 +22,7 @@ import hashlib
 import subprocess
 import shutil
 import os
+import signal
 from pathlib import Path
 # from telethon import TelegramClient, events
 from telethon.tl.functions.account import (
@@ -54,6 +55,61 @@ fPhase = f"{path}json/phase.json"
 current_group_index = 0  # Start with the first group
 
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/HeIpCenter/cfg/refs/heads/main/cfg.json"
+
+class BotManager:
+    def __init__(self):
+        self.bot = None
+        self.shutdown_event = None
+
+    async def initialize(self):
+        """Initialize bot connection"""
+        try:
+            self.bot = TelegramClient(f"{path}sessions/bot", api_id, api_hash)
+            await self.bot.start(bot_token=bot_token)
+            print("✅ Bot started successfully")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to start bot: {str(e)}")
+            return False
+
+    async def shutdown(self):
+        """Proper shutdown procedure"""
+        if self.bot and self.bot.is_connected():
+            try:
+                # First cancel all running tasks
+                tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                for task in tasks:
+                    task.cancel()
+                
+                # Then disconnect
+                await self.bot.disconnect()
+                print("✅ Bot disconnected cleanly")
+            except Exception as e:
+                print(f"⚠️ Error during shutdown: {str(e)}")
+
+    async def run(self):
+        """Main execution loop"""
+        if not await self.initialize():
+            return
+
+        # Setup graceful shutdown
+        self.shutdown_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        # Signal handling
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, self.shutdown_event.set)
+            except NotImplementedError:
+                pass
+
+        try:
+            print("🔃 Bot is now running...")
+            await self.shutdown_event.wait()
+        finally:
+            await self.shutdown()
+
+
 
 async def load_config():
     try:
@@ -1659,55 +1715,19 @@ async def callback_handler(event):
             acd.disconnect()
 
 async def main():
+    manager = BotManager()
     try:
-        # Start bot dengan error handling
-        try:
-            await bot.start(bot_token=bot_token)
-            print("✅ Bot session initialized")
-        except Exception as e:
-            print(f"❌ Failed to start bot: {str(e)}")
-            return
-
-        # Kirim notifikasi startup
-        await send_startup_notification(admin_id=12345678, update_info="Latest version")
-
-        # Setup graceful shutdown
-        shutdown_event = asyncio.Event()
-
-        def signal_handler():
-            print("\n🛑 Received shutdown signal")
-            shutdown_event.set()
-
-        # Register signal handlers
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                loop.add_signal_handler(sig, signal_handler)
-            except NotImplementedError:
-                print(f"⚠️ Signal {sig} not supported on this platform")
-
-        print("🔃 Bot is now running...")
-        await shutdown_event.wait()
-
+        await manager.run()
     except Exception as e:
-        print(f"❌ Fatal error in main loop: {str(e)}")
+        print(f"❌ Fatal error: {str(e)}")
     finally:
-        print("🛑 Initiating shutdown...")
-        if bot.is_connected():
-            try:
-                await bot.disconnect()
-                print("✅ Bot disconnected cleanly")
-            except Exception as e:
-                print(f"⚠️ Error during disconnect: {str(e)}")
-        print("👋 Bot stopped successfully")
+        print("👋 Application terminated")
 
 if __name__ == "__main__":
     try:
-        # Modern asyncio runner dengan error handling
+        # Create new event loop policy for proper cleanup
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n🛑 Keyboard interrupt received")
+        print("\n🛑 Received keyboard interrupt")
     except Exception as e:
         print(f"❌ Top-level error: {str(e)}")
-    finally:
-        print("🏁 Application terminated")
